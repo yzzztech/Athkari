@@ -404,7 +404,7 @@ function normalizeArabic(str) {
   return str
     .replace(/^سُورَةُ\s*/i, '')             // strip "سورة" prefix from API names
     .replace(/[ًٌٍَُِّْٰـۣۡۢۤۥۦ]/g, '')      // tashkeel + special Quran marks
-    .replace(/[أإآ]/g, 'ا')                  // alef variants
+    .replace(/[أإآٱ]/g, 'ا')                  // alef variants (including alef wasla)
     .replace(/[ىئ]/g, 'ي')                    // yeh variants
     .replace(/ة/g, 'ه')                       // teh marbuta
     .replace(/ؤ/g, 'و')                       // waw with hamza
