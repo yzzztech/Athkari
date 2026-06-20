@@ -859,6 +859,43 @@ body {
   flex-wrap: wrap;
 }
 
+/* ─── Quran Tabs ─── */
+.quran-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.quran-tab {
+  padding: 8px 16px;
+  border-radius: 8px 8px 0 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.quran-tab:hover {
+  color: var(--primary);
+}
+
+.quran-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+.quran-tab-content {
+  padding: 8px 0;
+}
+
 .back-btn {
   display: flex;
   align-items: center;
@@ -1003,6 +1040,50 @@ body {
   flex-direction: column;
   gap: 6px;
   padding: 12px 0;
+}
+
+/* ─── Tafsir & Eerab Views ─── */
+.tafsir-view .tafsir-ayah,
+.eerab-view .eerab-ayah {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.tafsir-content {
+  font-family: var(--font-ui);
+  font-size: 0.9375rem;
+  line-height: 1.9;
+  color: var(--text-secondary);
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  border-right: 3px solid var(--cat-quran);
+  white-space: pre-wrap;
+  direction: rtl;
+}
+
+.eerab-content {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-sm);
+  border-right: 3px solid var(--cat-morning);
+}
+
+.eerab-content pre {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  line-height: 2;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  direction: rtl;
+}
+
+.quran-error-sm {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  padding: 8px 0;
 }
 
 .bookmark-item {

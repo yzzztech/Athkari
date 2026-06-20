@@ -7,6 +7,7 @@ const STREAK_KEY = 'athkari_streak';
 const QURAN_POS_KEY = 'athkari_quran_pos';
 const QURAN_BOOKMARKS_KEY = 'athkari_quran_bookmarks';
 const QURAN_API = 'https://api.alquran.cloud/v1';
+const SURAH_API = 'https://dev.surahapp.com/api/v1';
 
 // ─── State ──────────────────────────────
 const state = {
@@ -497,12 +498,13 @@ function escapeHTML(str) {
 }
 
 // ═══════════════════════════════════════════
-//  QURAN MODULE
+//  QURAN MODULE (Surah App API + 3-tab view)
 // ═══════════════════════════════════════════
 
 let quranSurahs = null;
 let currentSurah = null;
 let currentAyahs = [];
+let quranActiveTab = 'reading'; // 'reading' | 'tafsir' | 'eerab'
 
 async function renderQuran() {
   loadQuranBookmarks();
@@ -580,10 +582,14 @@ function getSurahName(num) {
 }
 
 function getSurahType(num) {
-  // Makki: 1-8, 10-12, 14-18, 20-32, 34-46, 50-56, 67-114
-  // Madani: 9, 13, 19, 33, 47-49, 57-66
   const madani = [9, 13, 19, 33, 47, 48, 49, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66];
   return madani.includes(num) ? 'مدنية' : 'مكية';
+}
+
+function getJuzForSurah(surahNum) {
+  // Approximate juz mapping
+  const juzMap = {1:1,2:1,3:3,4:4,5:6,6:7,7:8,8:9,9:10,10:11,11:12,12:12,13:13,14:13,15:14,16:14,17:15,18:15,19:16,20:16,21:17,22:17,23:18,24:18,25:19,26:19,27:20,28:20,29:21,30:21,31:21,32:21,33:22,34:22,35:22,36:23,37:23,38:23,39:24,40:24,41:25,42:25,43:25,44:25,45:25,46:26,47:26,48:26,49:26,50:26,51:27,52:27,53:27,54:27,55:27,56:27,57:27,58:28,59:28,60:28,61:28,62:28,63:28,64:28,65:28,66:28,67:29,68:29,69:29,70:29,71:29,72:29,73:29,74:29,75:29,76:29,77:29,78:30,79:30,80:30,81:30,82:30,83:30,84:30,85:30,86:30,87:30,88:30,89:30,90:30,91:30,92:30,93:30,94:30,95:30,96:30,97:30,98:30,99:30,100:30,101:30,102:30,103:30,104:30,105:30,106:30,107:30,108:30,109:30,110:30,111:30,112:30,113:30,114:30};
+  return juzMap[surahNum] || 1;
 }
 
 function renderSurahList() {
@@ -599,7 +605,7 @@ function renderSurahList() {
           <span class="surah-number">${s.number}</span>
           <span class="surah-info">
             <span class="surah-name">${s.name}</span>
-            <span class="surah-meta">${s.englishName} · ${s.numberOfAyahs} آية · ${getSurahType(s.number)}</span>
+            <span class="surah-meta">${s.englishName} · ${s.numberOfAyahs} آية · ${getSurahType(s.number)} · الجزء ${getJuzForSurah(s.number)}</span>
           </span>
           <span class="surah-arrow">←</span>
         </button>
@@ -608,8 +614,11 @@ function renderSurahList() {
   `;
 }
 
-async function openSurah(surahNum) {
+async function openSurah(surahNum, tab = 'reading') {
+  quranActiveTab = tab;
   const container = document.getElementById('azkarList');
+  const surahMeta = quranSurahs ? quranSurahs.find(s => s.number === surahNum) : null;
+
   container.innerHTML = `
     <div class="quran-container">
       <div class="quran-reading-header">
@@ -619,28 +628,55 @@ async function openSurah(surahNum) {
         </button>
         <div class="quran-surah-title">
           <h2>سورة ${getSurahName(surahNum)}</h2>
-          <span class="surah-badge">${getSurahType(surahNum)} · ${quranSurahs ? quranSurahs.find(s => s.number === surahNum)?.numberOfAyahs : ''} آية</span>
+          <span class="surah-badge">${getSurahType(surahNum)} · ${surahMeta?.numberOfAyahs || ''} آية · الجزء ${getJuzForSurah(surahNum)}</span>
         </div>
         <div class="quran-toolbar">
           <button class="quran-tool-btn" onclick="saveReadingPos(${surahNum})" title="حفظ الموضع">📍</button>
           <button class="quran-tool-btn" onclick="quranFontSize(-1)">A-</button>
           <button class="quran-tool-btn" onclick="quranFontSize(1)">A+</button>
+          <button class="quran-tool-btn" onclick="navigator.share ? navigator.share({title:'سورة ${getSurahName(surahNum)}',url:window.location.href}) : showToast('المشاركة غير مدعومة في هذا المتصفح')" title="مشاركة">📤</button>
         </div>
       </div>
-      <div class="quran-loading">⏳ جارِ تحميل الآيات...</div>
+      <div class="quran-tabs" id="quranTabs">
+        <button class="quran-tab ${quranActiveTab === 'reading' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'reading')">📖 قراءة</button>
+        <button class="quran-tab ${quranActiveTab === 'tafsir' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'tafsir')">📚 تفسير</button>
+        <button class="quran-tab ${quranActiveTab === 'eerab' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'eerab')">📝 إعراب</button>
+      </div>
+      <div class="quran-tab-content" id="quranTabContent">
+        <div class="quran-loading">⏳ جارِ تحميل المحتوى...</div>
+      </div>
     </div>
   `;
+
+  currentSurah = surahNum;
+  if (quranActiveTab === 'reading') await loadReadingTab(surahNum);
+  else if (quranActiveTab === 'tafsir') await loadTafsirTab(surahNum);
+  else if (quranActiveTab === 'eerab') await loadEerabTab(surahNum);
+}
+
+async function switchQuranTab(surahNum, tab) {
+  quranActiveTab = tab;
+  document.querySelectorAll('.quran-tab').forEach(t => t.classList.remove('active'));
+  event?.target?.classList.add('active');
+  document.getElementById('quranTabContent').innerHTML = '<div class="quran-loading">⏳ جارِ تحميل المحتوى...</div>';
+
+  if (tab === 'reading') await loadReadingTab(surahNum);
+  else if (tab === 'tafsir') await loadTafsirTab(surahNum);
+  else if (tab === 'eerab') await loadEerabTab(surahNum);
+}
+
+async function loadReadingTab(surahNum) {
+  const content = document.getElementById('quranTabContent');
 
   try {
     const res = await fetch(`${QURAN_API}/surah/${surahNum}`);
     const data = await res.json();
-    currentSurah = surahNum;
     currentAyahs = data.data.ayahs;
 
-    let ayahsHTML = '<div class="quran-ayahs" id="quranAyahs">';
+    let html = '<div class="quran-ayahs" id="quranAyahs">';
     data.data.ayahs.forEach(ayah => {
       const isBookmarked = state.quranBookmarks.some(b => b.surah === surahNum && b.ayah === ayah.numberInSurah);
-      ayahsHTML += `
+      html += `
         <div class="quran-ayah" id="ayah-${ayah.numberInSurah}" data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}">
           <div class="ayah-controls">
             <button class="ayah-bookmark ${isBookmarked ? 'bookmarked' : ''}" onclick="toggleBookmark(${surahNum}, ${ayah.numberInSurah}, '${escapeHTML(ayah.text).replace(/'/g, "\\'")}')" title="${isBookmarked ? 'إلغاء الإشارة' : 'إضافة إشارة'}">
@@ -652,29 +688,98 @@ async function openSurah(surahNum) {
         </div>
       `;
     });
-    ayahsHTML += '</div>';
+    html += '</div>';
+    content.innerHTML = html;
 
-    container.querySelector('.quran-loading').outerHTML = ayahsHTML;
-
-    // Auto-scroll to saved position
     if (state.quranPos && state.quranPos.surah === surahNum) {
       setTimeout(() => {
         const target = document.getElementById(`ayah-${state.quranPos.ayah}`);
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 300);
     }
-
-    // Save current reading position
     saveReadingPos(surahNum, 1);
 
   } catch(e) {
-    container.querySelector('.quran-loading').outerHTML = '<div class="quran-error">❌ تعذّر تحميل الآيات. تأكد من اتصالك بالإنترنت.</div>';
+    content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل الآيات.</div>';
+  }
+}
+
+async function loadTafsirTab(surahNum) {
+  const content = document.getElementById('quranTabContent');
+  content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل التفسير من تفسير ابن كثير...</div>';
+
+  try {
+    // Load all ayahs for the surah from Surah App API with tafsir
+    const ayahCount = quranSurahs?.find(s => s.number === surahNum)?.numberOfAyahs || 7;
+    let html = '<div class="quran-ayahs tafsir-view" id="quranAyahs">';
+
+    for (let a = 1; a <= ayahCount; a++) {
+      try {
+        const tafsirRes = await fetch(`${SURAH_API}/aya/tafsir-katheer/${surahNum}/${a}`);
+        const tafsirData = await tafsirRes.json();
+
+        // Get ayah text from Quran API
+        const ayahRes = await fetch(`${QURAN_API}/ayah/${surahNum}/${a}`);
+        const ayahData = await ayahRes.json();
+        const ayahText = ayahData.data?.text || '';
+
+        html += `
+          <div class="quran-ayah tafsir-ayah" id="ayah-${a}">
+            <div class="ayah-controls">
+              <span class="ayah-number">${a}</span>
+            </div>
+            <div class="ayah-text">${ayahText}</div>
+            ${tafsirData.content ? `<div class="tafsir-content">${tafsirData.content}</div>` : ''}
+          </div>
+        `;
+      } catch(e) {
+        html += `<div class="quran-ayah"><span class="ayah-number">${a}</span><div class="quran-error-sm">تعذّر تحميل التفسير</div></div>`;
+      }
+    }
+    html += '</div>';
+    content.innerHTML = html;
+
+  } catch(e) {
+    content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل التفسير.</div>';
+  }
+}
+
+async function loadEerabTab(surahNum) {
+  const content = document.getElementById('quranTabContent');
+  content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل الإعراب...</div>';
+
+  try {
+    const ayahCount = quranSurahs?.find(s => s.number === surahNum)?.numberOfAyahs || 7;
+    let html = '<div class="quran-ayahs eerab-view" id="quranAyahs">';
+
+    for (let a = 1; a <= ayahCount; a++) {
+      try {
+        const eerabRes = await fetch(`${SURAH_API}/aya/eerab-aya/${surahNum}/${a}`);
+        const eerabData = await eerabRes.json();
+
+        html += `
+          <div class="quran-ayah eerab-ayah" id="ayah-${a}">
+            <div class="ayah-controls">
+              <span class="ayah-number">${a}</span>
+            </div>
+            <div class="ayah-text">${eerabData.aya_text || ''}</div>
+            ${eerabData.content ? `<div class="eerab-content"><pre>${eerabData.content}</pre></div>` : ''}
+          </div>
+        `;
+      } catch(e) {
+        html += `<div class="quran-ayah"><span class="ayah-number">${a}</span><div class="quran-error-sm">تعذّر تحميل الإعراب</div></div>`;
+      }
+    }
+    html += '</div>';
+    content.innerHTML = html;
+
+  } catch(e) {
+    content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل الإعراب.</div>';
   }
 }
 
 function saveReadingPos(surah, ayah) {
   if (!ayah) {
-    // Save at current scroll position
     const ayahs = document.querySelectorAll('.quran-ayah');
     let closest = { surah: currentSurah, ayah: 1 };
     ayahs.forEach(el => {
@@ -699,7 +804,6 @@ function resumeQuran() {
 
 function toggleBookmark(surah, ayah, text) {
   const idx = state.quranBookmarks.findIndex(b => b.surah === surah && b.ayah === ayah);
-
   if (idx >= 0) {
     state.quranBookmarks.splice(idx, 1);
     showToast('تم إلغاء الإشارة المرجعية');
@@ -709,7 +813,6 @@ function toggleBookmark(surah, ayah, text) {
     showToast('🔖 تمت الإشارة المرجعية');
     if (navigator.vibrate) navigator.vibrate(20);
   }
-
   saveQuranBookmarks();
   updateBookmarkButton(surah, ayah);
 }
@@ -725,7 +828,6 @@ function updateBookmarkButton(surah, ayah) {
 
 function showBookmarks() {
   const container = document.getElementById('azkarList');
-
   if (state.quranBookmarks.length === 0) {
     container.innerHTML = `
       <div class="quran-container">
@@ -741,7 +843,6 @@ function showBookmarks() {
     `;
     return;
   }
-
   container.innerHTML = `
     <div class="quran-container">
       <div class="quran-reading-header">
