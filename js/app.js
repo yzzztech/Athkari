@@ -155,10 +155,68 @@ function setActiveCategory(catId) {
   if (catId === 'quran') {
     renderQuran();
     document.getElementById('progressSection').style.display = 'none';
+  } else if (catId === 'prayer') {
+    document.getElementById('progressSection').style.display = 'none';
+    renderPrayer();
   } else {
     document.getElementById('progressSection').style.display = 'flex';
     renderAzkar(catId);
   }
+}
+
+// ─── Render Prayer Guide ─────────────────
+function renderPrayer() {
+  const container = document.getElementById('azkarList');
+  const cat = AZKAR_DATA.categories.find(c => c.id === 'prayer');
+
+  let html = `
+    <div class="category-header">
+      <h2>${cat.icon} ${cat.name}</h2>
+      <p class="time-hint">${cat.time}</p>
+    </div>
+  `;
+
+  // Prayer steps
+  html += '<div class="prayer-steps">';
+  AZKAR_DATA.prayerSteps.forEach((s, i) => {
+    html += `
+      <div class="prayer-step">
+        <div class="prayer-step-number">${s.step}</div>
+        <div class="prayer-step-content">
+          <h3 class="prayer-step-title">${s.title}</h3>
+          <p class="prayer-step-desc">${s.desc}</p>
+          ${s.zikr ? `<div class="prayer-step-zikr">${s.zikr}</div>` : ''}
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+
+  // Prayer rakaat table
+  if (AZKAR_DATA.prayerInfo) {
+    html += `
+      <div class="prayer-info-card">
+        <h3>${AZKAR_DATA.prayerInfo.title}</h3>
+        <div class="prayer-table">
+          ${AZKAR_DATA.prayerInfo.prayers.map(p => `
+            <div class="prayer-row">
+              <div class="prayer-name">${p.name}</div>
+              <div class="prayer-rakaat">
+                <span class="rakaat-num">${p.rakaat}</span>
+                <span class="rakaat-label">ركعات</span>
+              </div>
+              <div class="prayer-details">
+                <div class="prayer-sunnah">${p.sunnah}</div>
+                <div class="prayer-time">${p.time}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
 }
 
 // ─── Render Azkar ───────────────────────
