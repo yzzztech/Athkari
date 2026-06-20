@@ -704,12 +704,21 @@ async function loadReadingTab(surahNum) {
   }
 }
 
+function cleanApiText(text) {
+  return text
+    .replace(/¥/g, '')        // Remove Surah API section marker
+    .replace(/¬/g, '')        // Remove Surah API note marker
+    .replace(/\\r\\n/g, '\n') // Convert escaped newlines
+    .replace(/\r\n/g, '\n')   // Convert Windows newlines
+    .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+    .trim();
+}
+
 async function loadTafsirTab(surahNum) {
   const content = document.getElementById('quranTabContent');
   content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل التفسير من تفسير ابن كثير...</div>';
 
   try {
-    // Load all ayahs for the surah from Surah App API with tafsir
     const ayahCount = quranSurahs?.find(s => s.number === surahNum)?.numberOfAyahs || 7;
     let html = '<div class="quran-ayahs tafsir-view" id="quranAyahs">';
 
@@ -718,10 +727,10 @@ async function loadTafsirTab(surahNum) {
         const tafsirRes = await fetch(`${SURAH_API}/aya/tafsir-katheer/${surahNum}/${a}`);
         const tafsirData = await tafsirRes.json();
 
-        // Get ayah text from Quran API
         const ayahRes = await fetch(`${QURAN_API}/ayah/${surahNum}/${a}`);
         const ayahData = await ayahRes.json();
         const ayahText = ayahData.data?.text || '';
+        const tafsirText = tafsirData.content ? cleanApiText(tafsirData.content) : '';
 
         html += `
           <div class="quran-ayah tafsir-ayah" id="ayah-${a}">
@@ -729,7 +738,7 @@ async function loadTafsirTab(surahNum) {
               <span class="ayah-number">${a}</span>
             </div>
             <div class="ayah-text">${ayahText}</div>
-            ${tafsirData.content ? `<div class="tafsir-content">${tafsirData.content}</div>` : ''}
+            ${tafsirText ? `<div class="tafsir-content">${tafsirText}</div>` : ''}
           </div>
         `;
       } catch(e) {
@@ -756,6 +765,7 @@ async function loadEerabTab(surahNum) {
       try {
         const eerabRes = await fetch(`${SURAH_API}/aya/eerab-aya/${surahNum}/${a}`);
         const eerabData = await eerabRes.json();
+        const eerabText = eerabData.content ? cleanApiText(eerabData.content) : '';
 
         html += `
           <div class="quran-ayah eerab-ayah" id="ayah-${a}">
@@ -763,7 +773,7 @@ async function loadEerabTab(surahNum) {
               <span class="ayah-number">${a}</span>
             </div>
             <div class="ayah-text">${eerabData.aya_text || ''}</div>
-            ${eerabData.content ? `<div class="eerab-content"><pre>${eerabData.content}</pre></div>` : ''}
+            ${eerabText ? `<div class="eerab-content"><pre>${eerabText}</pre></div>` : ''}
           </div>
         `;
       } catch(e) {
