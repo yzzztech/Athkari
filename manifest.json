@@ -1,0 +1,24 @@
+{
+  "name": "أَذْكُر — أذكارك اليومية",
+  "short_name": "أَذْكُر",
+  "description": "موقع بسيط لقراءة الأذكار اليومية — تصميم شبابي، خالي من الإعلانات، مع شرح للفضل ومتى يقال",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f8fafb",
+  "theme_color": "#0D9488",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "lang": "ar",
+  "dir": "rtl"
+}
