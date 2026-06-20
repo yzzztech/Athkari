@@ -536,7 +536,7 @@ const AZKAR_DATA = {
     {
       id: "prayer",
       name: "كيفية الصلاة",
-      icon: "🤲",
+      icon: "🧎",
       time: "دليل خطوة بخطوة لأداء الصلاة",
       type: "guide"
     }
