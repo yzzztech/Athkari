@@ -19,6 +19,7 @@
     <div class="topbar-inner">
       <h1 class="logo">أذكاري</h1>
       <div class="topbar-actions">
+        <span id="streakDisplay"></span>
         <button class="icon-btn" id="searchBtn" aria-label="بحث" title="بحث (⌘K)">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         </button>
@@ -44,10 +45,12 @@
 
   <!-- Main Content -->
   <main>
-    <!-- Category Tabs -->
-    <nav class="category-tabs" id="categoryTabs">
-      <!-- Rendered by JS -->
-    </nav>
+    <!-- Category Tabs with fade edges -->
+    <div class="tabs-wrapper">
+      <nav class="category-tabs" id="categoryTabs">
+        <!-- Rendered by JS -->
+      </nav>
+    </div>
 
     <!-- Progress Bar -->
     <div class="progress-section" id="progressSection">
@@ -57,7 +60,7 @@
       <span class="progress-text" id="progressText">٠/٠</span>
     </div>
 
-    <!-- Azkar List -->
+    <!-- Azkar / Quran List -->
     <section class="azkar-list" id="azkarList">
       <!-- Rendered by JS -->
     </section>
