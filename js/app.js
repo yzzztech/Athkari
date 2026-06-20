@@ -402,12 +402,13 @@ function renderSurahList(filter) {
 function normalizeArabic(str) {
   if (!str) return '';
   return str
-    .replace(/[ًٌٍَُِّْٰـ]/g, '')          // tashkeel
+    .replace(/^سُورَةُ\s*/i, '')             // strip "سورة" prefix from API names
+    .replace(/[ًٌٍَُِّْٰـۣۡۢۤۥۦ]/g, '')      // tashkeel + special Quran marks
     .replace(/[أإآ]/g, 'ا')                  // alef variants
     .replace(/[ىئ]/g, 'ي')                    // yeh variants
     .replace(/ة/g, 'ه')                       // teh marbuta
     .replace(/ؤ/g, 'و')                       // waw with hamza
-    .replace(/[\u064B-\u065F\u0670]/g, '')    // full diacritic range
+    .replace(/[\u064B-\u065F\u0670\u06E1-\u06ED]/g, '') // full diacritic + Quranic marks
     .replace(/\s+/g, ' ')                     // collapse spaces
     .trim()
     .toLowerCase();
