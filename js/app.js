@@ -192,13 +192,18 @@ function renderPrayer() {
   });
   html += '</div>';
 
-  // Prayer rakaat table
-  if (AZKAR_DATA.prayerInfo) {
-    html += `
-      <div class="prayer-info-card">
-        <h3>${AZKAR_DATA.prayerInfo.title}</h3>
+  // All prayer types
+  const PI = AZKAR_DATA.prayerInfo;
+  if (!PI) { container.innerHTML = html; return; }
+
+  function renderPrayerTable(section) {
+    if (!section || !section.prayers) return '';
+    return `
+      <div class="prayer-section">
+        <h3 class="prayer-section-title">${section.title}</h3>
+        ${section.desc ? `<p class="prayer-section-desc">${renderMD(section.desc)}</p>` : ''}
         <div class="prayer-table">
-          ${AZKAR_DATA.prayerInfo.prayers.map(p => `
+          ${section.prayers.map(p => `
             <div class="prayer-row">
               <div class="prayer-name">${p.name}</div>
               <div class="prayer-rakaat">
@@ -206,8 +211,9 @@ function renderPrayer() {
                 <span class="rakaat-label">ركعات</span>
               </div>
               <div class="prayer-details">
-                <div class="prayer-sunnah">${p.sunnah}</div>
-                <div class="prayer-time">${p.time}</div>
+                ${p.sunnah ? `<div class="prayer-sunnah">${p.sunnah}</div>` : ''}
+                ${p.time ? `<div class="prayer-time">${p.time}</div>` : ''}
+                ${p.note ? `<div class="prayer-note">${renderMD(p.note)}</div>` : ''}
               </div>
             </div>
           `).join('')}
@@ -215,6 +221,37 @@ function renderPrayer() {
       </div>
     `;
   }
+
+  function renderPrayerCard(key, data) {
+    if (!data || !data.title) return '';
+    return `
+      <div class="prayer-section">
+        <h3 class="prayer-section-title">${data.title}</h3>
+        <p class="prayer-section-desc">${renderMD(data.desc)}</p>
+        <div class="prayer-card-detail">
+          <div class="prayer-rakaat-badge">
+            <span class="rakaat-num">${data.rakaat}</span>
+            <span class="rakaat-label">ركعات</span>
+          </div>
+        </div>
+        ${data.note ? `<div class="prayer-note">${renderMD(data.note)}</div>` : ''}
+        ${data.fadl ? `<div class="prayer-fadl">🌟 ${renderMD(data.fadl)}</div>` : ''}
+        ${data.zikr ? `<div class="prayer-step-zikr">${renderMD(data.zikr)}</div>` : ''}
+      </div>
+    `;
+  }
+
+  // Fard prayers
+  html += renderPrayerTable(PI.fard);
+
+  // Sunan rawatib
+  html += renderPrayerTable(PI.sunan);
+
+  // Other prayers as cards
+  const otherPrayers = ['witr', 'duha', 'tahajjud', 'tarawih', 'istikhara', 'tawbah', 'hajah', 'tasabeeh', 'eid', 'kusoof', 'istisqa', 'janaza', 'tahiyat_masjid', 'wudu'];
+  otherPrayers.forEach(key => {
+    html += renderPrayerCard(key, PI[key]);
+  });
 
   container.innerHTML = html;
 }

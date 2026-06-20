@@ -1246,6 +1246,66 @@ body {
 }
 
 /* Prayer info card */
+.prayer-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 12px;
+}
+
+.prayer-section-title {
+  font-family: var(--font-azkar);
+  font-size: 1.125rem;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.prayer-section-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  line-height: 1.7;
+}
+
+.prayer-card-detail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.prayer-rakaat-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--primary-light);
+  padding: 6px 14px;
+  border-radius: 100px;
+}
+
+.prayer-note {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  border-right: 3px solid var(--border);
+}
+
+.prayer-fadl {
+  font-size: 0.875rem;
+  color: var(--primary-dark);
+  line-height: 1.7;
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--primary-light);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
 .prayer-info-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
