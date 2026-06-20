@@ -320,6 +320,24 @@ body {
   font-weight: 500;
 }
 
+.zikr-card .zikr-text strong {
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.zikr-card .zikr-text em {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.zikr-card .zikr-text p {
+  margin-bottom: 8px;
+}
+
+.zikr-card .zikr-text p:last-child {
+  margin-bottom: 0;
+}
+
 .zikr-card .zikr-source {
   font-size: 0.75rem;
   color: var(--text-tertiary);
@@ -1214,6 +1232,17 @@ body {
   line-height: 2;
   color: var(--text);
   text-align: justify;
+}
+
+.prayer-step-zikr strong,
+.expand-value strong {
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.prayer-step-zikr em,
+.expand-value em {
+  color: var(--text-secondary);
 }
 
 /* Prayer info card */

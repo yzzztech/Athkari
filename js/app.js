@@ -184,8 +184,8 @@ function renderPrayer() {
         <div class="prayer-step-number">${s.step}</div>
         <div class="prayer-step-content">
           <h3 class="prayer-step-title">${s.title}</h3>
-          <p class="prayer-step-desc">${s.desc}</p>
-          ${s.zikr ? `<div class="prayer-step-zikr">${s.zikr}</div>` : ''}
+          <p class="prayer-step-desc">${renderMD(s.desc)}</p>
+          ${s.zikr ? `<div class="prayer-step-zikr">${renderMD(s.zikr)}</div>` : ''}
         </div>
       </div>
     `;
@@ -242,7 +242,7 @@ function renderAzkar(catId) {
     html += `
       <div class="zikr-card ${isCompleted ? 'completed' : ''}" data-key="${key}" data-count="${target}">
         <div class="completed-check">✓</div>
-        <div class="zikr-text">${z.text}</div>
+        <div class="zikr-text">${renderMD(z.text)}</div>
         <div class="zikr-source">📖 ${z.source}</div>
         <div class="zikr-footer">
           <div class="zikr-actions">
@@ -270,9 +270,9 @@ function renderAzkar(catId) {
         ${z.when || z.fadl || z.meaning ? `
           <div class="expand-panel" id="expand-${key}">
             <div class="expand-inner">
-              ${z.when ? `<div class="expand-row"><span class="expand-label">✦ متى يُقال</span><span class="expand-value">${z.when}</span></div>` : ''}
-              ${z.fadl ? `<div class="expand-row"><span class="expand-label">🌟 فضله</span><span class="expand-value">${z.fadl}</span></div>` : ''}
-              ${z.meaning ? `<div class="expand-row"><span class="expand-label">📝 معاني</span><span class="expand-value">${z.meaning}</span></div>` : ''}
+              ${z.when ? `<div class="expand-row"><span class="expand-label">✦ متى يُقال</span><span class="expand-value">${renderMD(z.when)}</span></div>` : ''}
+              ${z.fadl ? `<div class="expand-row"><span class="expand-label">🌟 فضله</span><span class="expand-value">${renderMD(z.fadl)}</span></div>` : ''}
+              ${z.meaning ? `<div class="expand-row"><span class="expand-label">📝 معاني</span><span class="expand-value">${renderMD(z.meaning)}</span></div>` : ''}
             </div>
           </div>
         ` : ''}
@@ -553,6 +553,22 @@ function escapeHTML(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ─── Markdown Renderer ───────────────────
+function renderMD(text) {
+  if (!text) return '';
+  let html = escapeHTML(text);
+  // Bold: **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // Italic: *text*
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // Line breaks: double newline → paragraph, single → <br>
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  // Wrap in paragraph if not already
+  if (!html.startsWith('<')) html = '<p>' + html + '</p>';
+  return html;
 }
 
 // ═══════════════════════════════════════════
