@@ -493,6 +493,12 @@ async function loadReadingTab(surahNum) {
     currentAyahs = data.data.ayahs;
 
     let html = '<div class="quran-ayahs" id="quranAyahs">';
+
+    // Bismillah for all surahs except Al-Fatihah (where it IS ayah 1)
+    if (surahNum !== 1 && surahNum !== 9) {
+      html += '<div class="bismillah">﷽</div>';
+    }
+
     data.data.ayahs.forEach(ayah => {
       const isBookmarked = state.quranBookmarks.some(b => b.surah === surahNum && b.ayah === ayah.numberInSurah);
       const isHighlighted = state.quranPos && state.quranPos.surah === surahNum && state.quranPos.ayah === ayah.numberInSurah;
