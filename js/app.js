@@ -759,7 +759,7 @@ function renderPrayerTab() {
     }
 
     // Additional prayers (witr, duha, tahajjud, etc.)
-    const extraKeys = ['witr','duha','tahajjud','tarawih','istikhara','tawbah','hajah','tasabeeh','eid','kusoof','istisqa','janaza','tahiyat_masjid','wudu'];
+    const extraKeys = ['witr','duha','tahajjud','tarawih','istikhara','tawbah','hajah','tasabeeh','eid','kusoof','istisqa','janaza','tahiyat_masjid','wudu','jumuah','khawf','musafir','jam','mareed','awwabeen','qadha'];
     const extraPrayers = extraKeys.map(k => PI[k]).filter(Boolean);
     if (extraPrayers.length) {
       html += '<div class="prayer-table-section"><h3>صلوات إضافية</h3>';
