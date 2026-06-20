@@ -2,10 +2,12 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#0D9488">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="أذكاري">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📿</text></svg>">
   <title>أذكاري — أذكارك اليومية</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,65 +16,64 @@
   <link rel="manifest" href="manifest.json">
 </head>
 <body>
-  <!-- Top Bar -->
-  <header class="topbar">
-    <div class="topbar-inner">
-      <h1 class="logo">أذكاري</h1>
-      <div class="topbar-actions">
-        <span id="streakDisplay"></span>
-        <button class="icon-btn" id="searchBtn" aria-label="بحث" title="بحث (⌘K)">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        </button>
-        <button class="icon-btn" id="themeToggle" aria-label="تغيير المظهر">
-          <svg class="sun-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
-          <svg class="moon-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
-        </button>
-      </div>
-    </div>
-  </header>
 
-  <!-- Search Overlay -->
-  <div class="search-overlay" id="searchOverlay">
-    <div class="search-modal">
-      <div class="search-input-wrap">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" id="searchInput" placeholder="ابحث عن ذكر أو دعاء..." autocomplete="off">
-        <kbd>ESC</kbd>
+  <!-- ═══ App Shell ═══ -->
+  <div id="app" class="app-shell">
+
+    <!-- ─── Status Bar Safe Area ─── -->
+    <div class="safe-top"></div>
+
+    <!-- ─── Header ─── -->
+    <header class="app-header">
+      <h1 class="header-title" id="headerTitle">أذكاري</h1>
+      <div class="header-actions">
+        <span id="streakDisplay" class="streak-badge"></span>
+        <button class="icon-btn" id="themeToggle" aria-label="تغيير المظهر">
+          <svg class="sun-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <svg class="moon-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        </button>
       </div>
-      <div class="search-results" id="searchResults"></div>
+    </header>
+
+    <!-- ─── Sub Header (for back navigation) ─── -->
+    <div class="sub-header" id="subHeader" style="display:none">
+      <button class="back-btn" id="backBtn" aria-label="رجوع">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="sub-header-title" id="subHeaderTitle"></span>
+      <span class="sub-header-spacer"></span>
     </div>
+
+    <!-- ─── Main Content Area ─── -->
+    <main class="main-content" id="mainContent">
+      <!-- Dynamically rendered -->
+    </main>
+
+    <!-- ═══ Bottom Tab Bar (Native iOS Style) ═══ -->
+    <nav class="tab-bar" id="tabBar">
+      <button class="tab-bar-item active" data-tab="azkar">
+        <span class="tab-icon">📿</span>
+        <span class="tab-label">الأذكار</span>
+      </button>
+      <button class="tab-bar-item" data-tab="quran">
+        <span class="tab-icon">📖</span>
+        <span class="tab-label">المصحف</span>
+      </button>
+      <button class="tab-bar-item" data-tab="prayer">
+        <span class="tab-icon">🕌</span>
+        <span class="tab-label">الصلاة</span>
+      </button>
+      <button class="tab-bar-item" data-tab="more">
+        <span class="tab-icon">⚙️</span>
+        <span class="tab-label">المزيد</span>
+      </button>
+    </nav>
+
+    <!-- ─── Safe Area Bottom ─── -->
+    <div class="safe-bottom"></div>
   </div>
 
-  <!-- Main Content -->
-  <main>
-    <!-- Category Tabs with fade edges -->
-    <div class="tabs-wrapper">
-      <nav class="category-tabs" id="categoryTabs">
-        <!-- Rendered by JS -->
-      </nav>
-    </div>
-
-    <!-- Progress Bar -->
-    <div class="progress-section" id="progressSection">
-      <div class="progress-bar">
-        <div class="progress-fill" id="progressFill"></div>
-      </div>
-      <span class="progress-text" id="progressText">٠/٠</span>
-    </div>
-
-    <!-- Azkar / Quran List -->
-    <section class="azkar-list" id="azkarList">
-      <!-- Rendered by JS -->
-    </section>
-
-    <!-- Empty State -->
-    <div class="empty-state" id="emptyState" style="display:none">
-      <div class="empty-icon">📿</div>
-      <p>اختر قسماً من الأعلى لبدء قراءة أذكارك</p>
-    </div>
-  </main>
-
-  <!-- Toast -->
+  <!-- ═══ Toast ═══ -->
   <div class="toast" id="toast"></div>
 
   <script src="js/data.js"></script>

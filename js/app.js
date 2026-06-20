@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════
-   أذكاري — App Logic v2
+   أذكاري — App Logic v3 (Native Mobile)
    ═══════════════════════════════════════ */
 
 const STORAGE_KEY = 'athkari_state';
@@ -11,29 +11,34 @@ const SURAH_API = 'https://dev.surahapp.com/api/v1';
 
 // ─── State ──────────────────────────────
 const state = {
-  activeCategory: null,
+  activeTab: 'azkar',       // 'azkar' | 'quran' | 'prayer' | 'more'
+  azkarCategory: null,       // active azkar category ID
   theme: 'light',
   completed: {},
   counters: {},
   streaks: {},
-  quranPos: null,        // { surah, ayah }
-  quranBookmarks: [],    // [{ surah, ayah, text, note }]
+  quranPos: null,
+  quranBookmarks: [],
+  quranView: 'list',        // 'list' | 'reading' | 'bookmarks'
+  quranActiveTab: 'reading' // reading|tafsir|eerab
 };
 
-// ─── Init ───────────────────────────────
+let quranSurahs = null;
+let currentSurah = null;
+let currentAyahs = [];
+
+// ─── Init ────────────────────────────────
 function init() {
   loadState();
   loadStreaks();
+  loadQuranBookmarks();
   applyTheme();
-  renderTabs();
   setupEventListeners();
+  navigateTo('azkar');
   updateStreakDisplay();
-
-  const defaultCat = AZKAR_DATA.categories[0].id;
-  setActiveCategory(defaultCat);
 }
 
-// ─── State Persistence ──────────────────
+// ─── Persistence ─────────────────────────
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -80,33 +85,29 @@ function loadQuranBookmarks() {
   try {
     const raw = localStorage.getItem(QURAN_BOOKMARKS_KEY);
     if (raw) state.quranBookmarks = JSON.parse(raw);
-  } catch(e) {}
+  } catch(e) { state.quranBookmarks = []; }
 }
 
 function saveQuranBookmarks() {
   localStorage.setItem(QURAN_BOOKMARKS_KEY, JSON.stringify(state.quranBookmarks));
 }
 
-// ─── Streak Display ─────────────────────
+// ─── Streak Display ──────────────────────
 function updateStreakDisplay() {
-  const streakEl = document.getElementById('streakDisplay');
-  if (!streakEl) return;
+  const el = document.getElementById('streakDisplay');
+  if (!el) return;
   const today = new Date().toISOString().split('T')[0];
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-
-  // Count consecutive days
   let streak = 0;
   const d = new Date();
   while (state.streaks[d.toISOString().split('T')[0]]) {
     streak++;
     d.setDate(d.getDate() - 1);
   }
-
-  if (state.streaks[today] || state.streaks[yesterday]) {
-    streakEl.innerHTML = `🔥 ${streak}`;
-    streakEl.style.display = 'inline';
+  if (streak > 0) {
+    el.innerHTML = `🔥 ${streak}`;
+    el.classList.add('visible');
   } else {
-    streakEl.style.display = 'none';
+    el.classList.remove('visible');
   }
 }
 
@@ -121,518 +122,213 @@ function toggleTheme() {
   saveState();
 }
 
-// ─── Render Tabs ────────────────────────
-function renderTabs() {
-  const container = document.getElementById('categoryTabs');
-  container.innerHTML = AZKAR_DATA.categories.map((cat, i) => `
-    <button class="cat-tab cat-${cat.id} ${cat.id === state.activeCategory ? 'active' : ''}"
-            data-cat="${cat.id}" style="--tab-index: ${i}">
-      ${cat.icon} ${cat.name}
-    </button>
-  `).join('');
+// ─── Navigation ──────────────────────────
+function navigateTo(tab) {
+  state.activeTab = tab;
+  state.quranView = 'list'; // reset quran view
 
-  // Add Quran tab
-  const quranActive = state.activeCategory === 'quran';
-  container.innerHTML += `
-    <button class="cat-tab cat-quran ${quranActive ? 'active' : ''}"
-            data-cat="quran" style="--tab-index: ${AZKAR_DATA.categories.length}">
-      📖 المصحف
-    </button>
-  `;
+  // Update tab bar
+  document.querySelectorAll('.tab-bar-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.tab === tab);
+  });
 
-  const activeTab = container.querySelector('.cat-tab.active');
-  if (activeTab) {
-    activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  // Update header & sub-header
+  const subHeader = document.getElementById('subHeader');
+  const headerTitle = document.getElementById('headerTitle');
+  const backBtn = document.getElementById('backBtn');
+
+  subHeader.style.display = 'none';
+  backBtn.onclick = null;
+
+  switch (tab) {
+    case 'azkar':
+      headerTitle.textContent = 'أذكاري';
+      renderAzkarTab();
+      break;
+    case 'quran':
+      headerTitle.textContent = 'المصحف';
+      renderQuranTab();
+      break;
+    case 'prayer':
+      headerTitle.textContent = 'الصلاة';
+      renderPrayerTab();
+      break;
+    case 'more':
+      headerTitle.textContent = 'المزيد';
+      renderMoreTab();
+      break;
   }
+
+  // Scroll main content to top
+  document.getElementById('mainContent').scrollTop = 0;
 }
 
-// ─── Set Active Category ────────────────
-function setActiveCategory(catId) {
-  state.activeCategory = catId;
-  renderTabs();
-  document.getElementById('emptyState').style.display = 'none';
-
-  if (catId === 'quran') {
-    renderQuran();
-    document.getElementById('progressSection').style.display = 'none';
-  } else if (catId === 'prayer') {
-    document.getElementById('progressSection').style.display = 'none';
-    renderPrayer();
-  } else {
-    document.getElementById('progressSection').style.display = 'flex';
-    renderAzkar(catId);
-  }
+// ─── Sub-header back navigation ──────────
+function showSubHeader(title, backFn) {
+  const subHeader = document.getElementById('subHeader');
+  subHeader.style.display = 'flex';
+  document.getElementById('subHeaderTitle').textContent = title;
+  const backBtn = document.getElementById('backBtn');
+  backBtn.onclick = () => {
+    if (state.activeTab === 'quran') {
+      state.quranView = 'list';
+      renderQuranTab();
+    }
+    backFn();
+  };
 }
 
-// ─── Render Prayer Guide ─────────────────
-function renderPrayer() {
-  const container = document.getElementById('azkarList');
-  const cat = AZKAR_DATA.categories.find(c => c.id === 'prayer');
+function hideSubHeader() {
+  document.getElementById('subHeader').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════
+//  AZKAR TAB
+// ═══════════════════════════════════════════
+
+function renderAzkarTab() {
+  const main = document.getElementById('mainContent');
+  const cats = AZKAR_DATA.categories.filter(c => c.id !== 'prayer');
+
+  if (!state.azkarCategory) state.azkarCategory = cats[0].id;
 
   let html = `
-    <div class="category-header">
-      <h2>${cat.icon} ${cat.name}</h2>
-      <p class="time-hint">${cat.time}</p>
+    <div class="category-tabs-wrapper">
+      <nav class="category-tabs" id="categoryTabs">
+        ${cats.map((cat, i) => `
+          <button class="cat-tab cat-${cat.id} ${cat.id === state.azkarCategory ? 'active' : ''}"
+                  data-cat="${cat.id}">
+            ${cat.icon} ${cat.name}
+          </button>
+        `).join('')}
+      </nav>
+    </div>
+    <div class="progress-section" id="progressSection">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <span class="progress-text" id="progressText">٠/٠</span>
+    </div>
+    <div id="azkarContent"></div>
+    <div class="empty-state" id="emptyState" style="display:none">
+      <div class="empty-icon">📿</div>
+      <p>اختر قسماً من الأعلى لبدء قراءة أذكارك</p>
     </div>
   `;
 
-  // Prayer steps
-  html += '<div class="prayer-steps">';
-  AZKAR_DATA.prayerSteps.forEach((s, i) => {
-    html += `
-      <div class="prayer-step">
-        <div class="prayer-step-number">${s.step}</div>
-        <div class="prayer-step-content">
-          <h3 class="prayer-step-title">${s.title}</h3>
-          <p class="prayer-step-desc">${renderMD(s.desc)}</p>
-          ${s.zikr ? `<div class="prayer-step-zikr">${renderMD(s.zikr)}</div>` : ''}
-        </div>
-      </div>
-    `;
-  });
-  html += '</div>';
-
-  // All prayer types
-  const PI = AZKAR_DATA.prayerInfo;
-  if (!PI) { container.innerHTML = html; return; }
-
-  function renderPrayerTable(section) {
-    if (!section || !section.prayers) return '';
-    return `
-      <div class="prayer-section">
-        <h3 class="prayer-section-title">${section.title}</h3>
-        ${section.desc ? `<p class="prayer-section-desc">${renderMD(section.desc)}</p>` : ''}
-        <div class="prayer-table">
-          ${section.prayers.map(p => `
-            <div class="prayer-row">
-              <div class="prayer-name">${p.name}</div>
-              <div class="prayer-rakaat">
-                <span class="rakaat-num">${p.rakaat}</span>
-                <span class="rakaat-label">ركعات</span>
-              </div>
-              <div class="prayer-details">
-                ${p.sunnah ? `<div class="prayer-sunnah">${p.sunnah}</div>` : ''}
-                ${p.time ? `<div class="prayer-time">${p.time}</div>` : ''}
-                ${p.note ? `<div class="prayer-note">${renderMD(p.note)}</div>` : ''}
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  function renderPrayerCard(key, data) {
-    if (!data || !data.title) return '';
-    return `
-      <div class="prayer-section">
-        <h3 class="prayer-section-title">${data.title}</h3>
-        <p class="prayer-section-desc">${renderMD(data.desc)}</p>
-        <div class="prayer-card-detail">
-          <div class="prayer-rakaat-badge">
-            <span class="rakaat-num">${data.rakaat}</span>
-            <span class="rakaat-label">ركعات</span>
-          </div>
-        </div>
-        ${data.note ? `<div class="prayer-note">${renderMD(data.note)}</div>` : ''}
-        ${data.fadl ? `<div class="prayer-fadl">🌟 ${renderMD(data.fadl)}</div>` : ''}
-        ${data.zikr ? `<div class="prayer-step-zikr">${renderMD(data.zikr)}</div>` : ''}
-      </div>
-    `;
-  }
-
-  // Fard prayers
-  html += renderPrayerTable(PI.fard);
-
-  // Sunan rawatib
-  html += renderPrayerTable(PI.sunan);
-
-  // Other prayers as cards
-  const otherPrayers = ['witr', 'duha', 'tahajjud', 'tarawih', 'istikhara', 'tawbah', 'hajah', 'tasabeeh', 'eid', 'kusoof', 'istisqa', 'janaza', 'tahiyat_masjid', 'wudu'];
-  otherPrayers.forEach(key => {
-    html += renderPrayerCard(key, PI[key]);
-  });
-
-  container.innerHTML = html;
+  main.innerHTML = html;
+  renderAzkarContent(state.azkarCategory);
 }
 
-// ─── Render Azkar ───────────────────────
-function renderAzkar(catId) {
-  const container = document.getElementById('azkarList');
+function renderAzkarContent(catId) {
+  state.azkarCategory = catId;
   const cat = AZKAR_DATA.categories.find(c => c.id === catId);
-  if (!cat) return;
+  const azkar = cat.azkar || [];
 
-  let html = `
-    <div class="category-header">
-      <h2>${cat.icon} ${cat.name}</h2>
-      <p class="time-hint">${cat.time}</p>
-    </div>
-  `;
+  // Update category tabs
+  document.querySelectorAll('.cat-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.cat === catId);
+  });
+  // Scroll active tab into view
+  const activeTab = document.querySelector('.cat-tab.active');
+  if (activeTab) activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
 
-  cat.azkar.forEach(z => {
-    const key = `${catId}-${z.id}`;
-    const current = state.counters[key] || 0;
-    const target = z.count;
-    const isCompleted = state.completed[key] || false;
-    const isSingle = target === 1;
+  // Update progress
+  const completed = azkar.filter(z => state.completed[z.id]).length;
+  document.getElementById('progressFill').style.width = azkar.length ? (completed / azkar.length * 100) + '%' : '0%';
+  document.getElementById('progressText').textContent = `${completed}/${azkar.length}`;
 
-    html += `
-      <div class="zikr-card ${isCompleted ? 'completed' : ''}" data-key="${key}" data-count="${target}">
-        <div class="completed-check">✓</div>
+  // Render azkar
+  const content = document.getElementById('azkarContent');
+  if (!azkar.length) {
+    content.innerHTML = '<div class="empty-state"><p>لا توجد أذكار في هذا القسم</p></div>';
+    return;
+  }
+
+  const count = state.counters[catId] || 0;
+  if (count > 0) saveStreak();
+
+  content.innerHTML = azkar.map(z => {
+    const zCount = state.counters[z.id] || 0;
+    const done = state.completed[z.id];
+    const max = z.count || 1;
+    return `
+      <div class="zikr-card ${done ? 'completed' : ''}" data-zikr="${z.id}">
+        <span class="completed-check">✅</span>
         <div class="zikr-text">${renderMD(z.text)}</div>
-        <div class="zikr-source">📖 ${z.source}</div>
+        ${z.benefit ? `<div style="font-size:0.8125rem;color:var(--text-tertiary);text-align:center;margin-bottom:8px">${renderMD(z.benefit)}</div>` : ''}
         <div class="zikr-footer">
-          <div class="zikr-actions">
-            ${isSingle ? `
-              <button class="check-btn ${isCompleted ? 'checked' : ''}" onclick="toggleSingle('${key}')" aria-label="أتممت">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${isCompleted ? '3' : '2'}"><path d="M20 6L9 17l-5-5"/></svg>
-              </button>
-            ` : `
-              <button class="counter-btn" onclick="decrement('${key}', ${target})" aria-label="ناقص">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14"/></svg>
-              </button>
-              <span class="counter-count">${current}/${target}</span>
-              <button class="counter-btn" onclick="increment('${key}', ${target})" aria-label="زائد" ${current < target ? 'data-auto="true"' : ''}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-              </button>
-            `}
-          </div>
-          ${z.when || z.fadl || z.meaning ? `
-            <button class="expand-btn" onclick="toggleExpand(this, '${key}')" aria-label="تفاصيل">
-              <span>فضـل الـذكـر</span>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-          ` : ''}
+          <button class="counter-btn" onclick="decrementZikr('${z.id}')">−</button>
+          <span class="counter-count">${zCount}/${max}</span>
+          <button class="counter-btn" onclick="incrementZikr('${z.id}', ${max})">+</button>
+          ${z.extended ? `<button class="expand-btn" onclick="toggleZikrExpand(this, '${z.id}')">▼</button>` : ''}
         </div>
-        ${z.when || z.fadl || z.meaning ? `
-          <div class="expand-panel" id="expand-${key}">
-            <div class="expand-inner">
-              ${z.when ? `<div class="expand-row"><span class="expand-label">✦ متى يُقال</span><span class="expand-value">${renderMD(z.when)}</span></div>` : ''}
-              ${z.fadl ? `<div class="expand-row"><span class="expand-label">🌟 فضله</span><span class="expand-value">${renderMD(z.fadl)}</span></div>` : ''}
-              ${z.meaning ? `<div class="expand-row"><span class="expand-label">📝 معاني</span><span class="expand-value">${renderMD(z.meaning)}</span></div>` : ''}
-            </div>
-          </div>
-        ` : ''}
+        ${z.extended ? `<div class="zikr-extended" id="extended-${z.id}" style="display:none;margin-top:8px;padding:10px;background:var(--bg-grouped);border-radius:8px;font-size:0.875rem;color:var(--text-secondary);text-align:center">${renderMD(z.extended)}</div>` : ''}
       </div>
     `;
-  });
-
-  // "Complete all" button
-  const allDone = cat.azkar.every(z => state.completed[`${catId}-${z.id}`]);
-  html += `
-    <button class="complete-all-btn ${allDone ? 'all-done' : ''}" onclick="completeAll('${catId}')">
-      ${allDone ? '✅ أتممت جميع الأذكار — بارك الله فيك' : '✓ أتممت الكل'}
-    </button>
-  `;
-
-  container.innerHTML = html;
-  updateProgress(cat);
+  }).join('');
 }
 
-// ─── Counter Logic ──────────────────────
-function toggleSingle(key) {
-  if (state.completed[key]) {
-    delete state.completed[key];
-    delete state.counters[key];
+function incrementZikr(zikrId, max) {
+  state.counters[zikrId] = (state.counters[zikrId] || 0) + 1;
+  if (state.counters[zikrId] >= max) {
+    state.counters[zikrId] = max;
+    state.completed[zikrId] = true;
+    if (navigator.vibrate) navigator.vibrate([10, 50, 10]);
+    showToast('✅ تم');
   } else {
-    state.completed[key] = true;
-    state.counters[key] = 1;
-    saveStreak();
-    showToast('✓ أتممت الذكر');
-    // Haptic feedback if available
-    if (navigator.vibrate) navigator.vibrate(30);
+    if (navigator.vibrate) navigator.vibrate(10);
   }
-  updateCard(key);
-  updateProgressForCurrent();
   saveState();
+  saveStreak();
+  renderAzkarContent(state.azkarCategory);
 }
 
-function increment(key, target) {
-  const current = (state.counters[key] || 0) + 1;
-  if (current >= target) {
-    state.counters[key] = target;
-    state.completed[key] = true;
-    saveStreak();
-    showToast('✓ أتممت الذكر');
-    if (navigator.vibrate) navigator.vibrate([20, 50, 20]);
-  } else {
-    state.counters[key] = current;
+function decrementZikr(zikrId) {
+  if (!state.counters[zikrId] || state.counters[zikrId] <= 0) return;
+  state.counters[zikrId]--;
+  if (state.completed[zikrId]) {
+    state.completed[zikrId] = false;
   }
-  updateCard(key);
-  updateProgressForCurrent();
   saveState();
+  renderAzkarContent(state.azkarCategory);
 }
 
-function decrement(key, target) {
-  const current = Math.max(0, (state.counters[key] || 0) - 1);
-  state.counters[key] = current;
-  if (current < target) {
-    delete state.completed[key];
-  }
-  updateCard(key);
-  updateProgressForCurrent();
-  saveState();
-}
-
-function completeAll(catId) {
-  const cat = AZKAR_DATA.categories.find(c => c.id === catId);
-  if (!cat) return;
-
-  const allDone = cat.azkar.every(z => state.completed[`${catId}-${z.id}`]);
-
-  if (allDone) {
-    // Undo all
-    cat.azkar.forEach(z => {
-      const key = `${catId}-${z.id}`;
-      delete state.completed[key];
-      delete state.counters[key];
-    });
-    showToast('تم إلغاء الإتمام');
-  } else {
-    cat.azkar.forEach(z => {
-      const key = `${catId}-${z.id}`;
-      state.counters[key] = z.count;
-      state.completed[key] = true;
-    });
-    saveStreak();
-    showToast('✓ بارك الله فيك — أتممت جميع الأذكار');
-  }
-  renderAzkar(catId);
-  saveState();
-}
-
-function updateCard(key) {
-  const card = document.querySelector(`[data-key="${key}"]`);
-  if (!card) return;
-  const target = parseInt(card.dataset.count);
-  const current = state.counters[key] || 0;
-  const isCompleted = state.completed[key];
-  const isSingle = target === 1;
-
-  card.classList.toggle('completed', isCompleted);
-
-  if (isSingle) {
-    const checkBtn = card.querySelector('.check-btn');
-    if (checkBtn) checkBtn.classList.toggle('checked', isCompleted);
-  } else {
-    const countEl = card.querySelector('.counter-count');
-    if (countEl) countEl.textContent = `${current}/${target}`;
-  }
-}
-
-function updateProgressForCurrent() {
-  const cat = AZKAR_DATA.categories.find(c => c.id === state.activeCategory);
-  if (cat) updateProgress(cat);
-}
-
-function updateProgress(cat) {
-  const total = cat.azkar.length;
-  const done = cat.azkar.filter(z => state.completed[`${cat.id}-${z.id}`]).length;
-  const pct = total > 0 ? (done / total) * 100 : 0;
-
-  document.getElementById('progressFill').style.width = `${pct}%`;
-  document.getElementById('progressText').textContent = `${done}/${total}`;
-}
-
-// ─── Expand Panel ───────────────────────
-function toggleExpand(btn, key) {
-  const panel = document.getElementById(`expand-${key}`);
-  if (!panel) return;
-  panel.classList.toggle('open');
-  btn.classList.toggle('expanded');
-}
-
-// ─── Toast ──────────────────────────────
-let toastTimer;
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
-}
-
-// ─── Arabic Normalization ───────────────
-function normalizeArabic(str) {
-  return str
-    .replace(/[\u064B-\u065F\u0670]/g, '') // Remove diacritics
-    .replace(/[\u0621-\u0623\u0625-\u0626]/g, '\u0627') // Normalize alef variants
-    .replace(/\u0624/g, '\u0648') // Waw with hamza → waw
-    .replace(/\u0626/g, '\u064A') // Yeh with hamza → yeh
-    .replace(/\u0629/g, '\u0647') // Teh marbuta → heh
-    .replace(/\u0649/g, '\u064A') // Alef maksura → yeh
-    .toLowerCase();
-}
-
-// ─── Search ─────────────────────────────
-function setupSearch() {
-  const overlay = document.getElementById('searchOverlay');
-  const input = document.getElementById('searchInput');
-  const results = document.getElementById('searchResults');
-
-  const searchIndex = [];
-  AZKAR_DATA.categories.forEach(cat => {
-    cat.azkar.forEach(z => {
-      searchIndex.push({
-        catId: cat.id,
-        catName: cat.name,
-        catIcon: cat.icon,
-        id: z.id,
-        text: z.text,
-        textNormalized: normalizeArabic(z.text),
-        source: z.source,
-        when: z.when || '',
-        whenNormalized: normalizeArabic(z.when || ''),
-        fadl: z.fadl || '',
-        fadlNormalized: normalizeArabic(z.fadl || ''),
-      });
-    });
-  });
-
-  function openSearch() {
-    overlay.classList.add('active');
-    input.value = '';
-    input.focus();
-    results.innerHTML = '<div class="search-hint">اكتب للبحث في الأذكار...</div>';
-  }
-
-  function closeSearch() {
-    overlay.classList.remove('active');
-  }
-
-  function highlightText(text, query) {
-    if (!query) return escapeHTML(text);
-    const q = normalizeArabic(query);
-    const t = normalizeArabic(text);
-    const idx = t.indexOf(q);
-    if (idx === -1) return escapeHTML(text);
-    // Find the matching segment in original text
-    let result = '';
-    let ti = 0;
-    for (let i = 0; i < text.length && ti < t.length; i++) {
-      const norm = normalizeArabic(text[i]);
-      if (norm) {
-        if (ti >= idx && ti < idx + q.length) {
-          result += '<mark>' + text[i] + '</mark>';
-        } else {
-          result += text[i];
-        }
-        ti++;
-      } else {
-        result += text[i];
-      }
-    }
-    return result;
-  }
-
-  function doSearch(query) {
-    if (!query.trim()) {
-      results.innerHTML = '<div class="search-hint">اكتب للبحث في الأذكار...</div>';
-      return;
-    }
-    const q = normalizeArabic(query);
-
-    const matches = searchIndex.filter(item =>
-      item.textNormalized.includes(q) ||
-      item.source.includes(query.toLowerCase()) ||
-      item.whenNormalized.includes(q) ||
-      item.fadlNormalized.includes(q) ||
-      item.catName.includes(query)
-    ).slice(0, 20);
-
-    if (matches.length === 0) {
-      results.innerHTML = '<div class="search-no-results">لا توجد نتائج</div>';
-      return;
-    }
-
-    results.innerHTML = matches.map(m => `
-      <div class="search-result-item" onclick="navigateToSearchResult('${m.catId}', ${m.id})">
-        <div class="sr-text">${highlightText(truncateText(m.text, 80), query)}</div>
-        <div class="sr-cat">${m.catIcon} ${m.catName} — ${m.source}</div>
-      </div>
-    `).join('');
-  }
-
-  document.getElementById('searchBtn').addEventListener('click', openSearch);
-  input.addEventListener('input', e => doSearch(e.target.value));
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeSearch();
-  });
-
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-      e.preventDefault();
-      openSearch();
-    }
-    if (e.key === 'Escape') closeSearch();
-  });
-}
-
-function navigateToSearchResult(catId, zikrId) {
-  document.getElementById('searchOverlay').classList.remove('active');
-  setActiveCategory(catId);
-  setTimeout(() => {
-    const card = document.querySelector(`[data-key="${catId}-${zikrId}"]`);
-    if (card) {
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      card.style.boxShadow = '0 0 0 3px var(--primary)';
-      setTimeout(() => card.style.boxShadow = '', 2500);
-    }
-  }, 300);
-}
-
-function truncateText(text, max) {
-  if (text.length <= max) return text;
-  return text.slice(0, max) + '...';
-}
-
-function escapeHTML(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-// ─── Markdown Renderer ───────────────────
-function renderMD(text) {
-  if (!text) return '';
-  let html = escapeHTML(text);
-  // Bold: **text**
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Italic: *text*
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Line breaks: double newline → paragraph, single → <br>
-  html = html.replace(/\n\n/g, '</p><p>');
-  html = html.replace(/\n/g, '<br>');
-  // Wrap in paragraph if not already
-  if (!html.startsWith('<')) html = '<p>' + html + '</p>';
-  return html;
+function toggleZikrExpand(btn, zikrId) {
+  const el = document.getElementById('extended-' + zikrId);
+  if (!el) return;
+  const show = el.style.display === 'none';
+  el.style.display = show ? 'block' : 'none';
+  btn.textContent = show ? '▲' : '▼';
 }
 
 // ═══════════════════════════════════════════
-//  QURAN MODULE (Surah App API + 3-tab view)
+//  QURAN TAB
 // ═══════════════════════════════════════════
 
-let quranSurahs = null;
-let currentSurah = null;
-let currentAyahs = [];
-let quranActiveTab = 'reading'; // 'reading' | 'tafsir' | 'eerab'
+async function renderQuranTab() {
+  const main = document.getElementById('mainContent');
+  hideSubHeader();
 
-async function renderQuran() {
-  loadQuranBookmarks();
-  const container = document.getElementById('azkarList');
+  if (state.quranView === 'bookmarks') { showBookmarks(); return; }
+  if (state.quranView === 'reading' && currentSurah) {
+    // Already in reading view — re-render
+    await openSurah(currentSurah, true);
+    return;
+  }
 
-  container.innerHTML = `
+  // Default: surah list
+  state.quranView = 'list';
+  main.innerHTML = `
     <div class="quran-container">
       <div class="quran-nav-bar">
         <div class="quran-nav-left">
           ${state.quranPos ? `
             <button class="quran-resume-btn" onclick="resumeQuran()">
-              📍 متابعة — سورة ${getSurahName(state.quranPos.surah)} ${state.quranPos.ayah}
+              📍 متابعة — ${getSurahName(state.quranPos.surah)} ${state.quranPos.ayah}
             </button>
           ` : ''}
         </div>
         <button class="quran-bookmarks-btn" onclick="showBookmarks()" title="الإشارات المرجعية">
-          📑 <span id="bookmarkCount">${state.quranBookmarks.length || ''}</span>
+          📑 ${state.quranBookmarks.length || ''}
         </button>
       </div>
       ${!quranSurahs ? '<div class="quran-loading">⏳ جارِ تحميل المصحف...</div>' : renderSurahList()}
@@ -644,132 +340,87 @@ async function renderQuran() {
       const res = await fetch(`${QURAN_API}/surah`);
       const data = await res.json();
       quranSurahs = data.data;
-      container.querySelector('.quran-container').innerHTML = `
-        <div class="quran-nav-bar">
-          ${state.quranPos ? `
-            <button class="quran-resume-btn" onclick="resumeQuran()">
-              📍 متابعة — سورة ${getSurahName(state.quranPos.surah)} ${state.quranPos.ayah}
-            </button>
-          ` : ''}
-          <button class="quran-bookmarks-btn" onclick="showBookmarks()" title="الإشارات المرجعية">
-            📑 <span id="bookmarkCount">${state.quranBookmarks.length || ''}</span>
-          </button>
-        </div>
-        ${renderSurahList()}
-      `;
+      renderQuranTab();
     } catch(e) {
-      container.innerHTML = '<div class="quran-error">❌ تعذّر تحميل المصحف. تأكد من اتصالك بالإنترنت.</div>';
+      main.innerHTML = '<div class="quran-error">❌ تعذّر تحميل المصحف. تأكد من اتصالك بالإنترنت.</div>';
     }
   }
 }
 
-function getSurahName(num) {
-  const surahNames = {
-    1: 'الفاتحة', 2: 'البقرة', 3: 'آل عمران', 4: 'النساء', 5: 'المائدة',
-    6: 'الأنعام', 7: 'الأعراف', 8: 'الأنفال', 9: 'التوبة', 10: 'يونس',
-    11: 'هود', 12: 'يوسف', 13: 'الرعد', 14: 'إبراهيم', 15: 'الحجر',
-    16: 'النحل', 17: 'الإسراء', 18: 'الكهف', 19: 'مريم', 20: 'طه',
-    21: 'الأنبياء', 22: 'الحج', 23: 'المؤمنون', 24: 'النور', 25: 'الفرقان',
-    26: 'الشعراء', 27: 'النمل', 28: 'القصص', 29: 'العنكبوت', 30: 'الروم',
-    31: 'لقمان', 32: 'السجدة', 33: 'الأحزاب', 34: 'سبأ', 35: 'فاطر',
-    36: 'يس', 37: 'الصافات', 38: 'ص', 39: 'الزمر', 40: 'غافر',
-    41: 'فصلت', 42: 'الشورى', 43: 'الزخرف', 44: 'الدخان', 45: 'الجاثية',
-    46: 'الأحقاف', 47: 'محمد', 48: 'الفتح', 49: 'الحجرات', 50: 'ق',
-    51: 'الذاريات', 52: 'الطور', 53: 'النجم', 54: 'القمر', 55: 'الرحمن',
-    56: 'الواقعة', 57: 'الحديد', 58: 'المجادلة', 59: 'الحشر', 60: 'الممتحنة',
-    61: 'الصف', 62: 'الجمعة', 63: 'المنافقون', 64: 'التغابن', 65: 'الطلاق',
-    66: 'التحريم', 67: 'الملك', 68: 'القلم', 69: 'الحاقة', 70: 'المعارج',
-    71: 'نوح', 72: 'الجن', 73: 'المزمل', 74: 'المدثر', 75: 'القيامة',
-    76: 'الإنسان', 77: 'المرسلات', 78: 'النبأ', 79: 'النازعات', 80: 'عبس',
-    81: 'التكوير', 82: 'الانفطار', 83: 'المطففين', 84: 'الانشقاق', 85: 'البروج',
-    86: 'الطارق', 87: 'الأعلى', 88: 'الغاشية', 89: 'الفجر', 90: 'البلد',
-    91: 'الشمس', 92: 'الليل', 93: 'الضحى', 94: 'الشرح', 95: 'التين',
-    96: 'العلق', 97: 'القدر', 98: 'البينة', 99: 'الزلزلة', 100: 'العاديات',
-    101: 'القارعة', 102: 'التكاثر', 103: 'العصر', 104: 'الهمزة', 105: 'الفيل',
-    106: 'قريش', 107: 'الماعون', 108: 'الكوثر', 109: 'الكافرون', 110: 'النصر',
-    111: 'المسد', 112: 'الإخلاص', 113: 'الفلق', 114: 'الناس'
-  };
-  return surahNames[num] || `سورة ${num}`;
-}
-
-function getSurahType(num) {
-  const madani = [9, 13, 19, 33, 47, 48, 49, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66];
-  return madani.includes(num) ? 'مدنية' : 'مكية';
-}
-
-function getJuzForSurah(surahNum) {
-  // Approximate juz mapping
-  const juzMap = {1:1,2:1,3:3,4:4,5:6,6:7,7:8,8:9,9:10,10:11,11:12,12:12,13:13,14:13,15:14,16:14,17:15,18:15,19:16,20:16,21:17,22:17,23:18,24:18,25:19,26:19,27:20,28:20,29:21,30:21,31:21,32:21,33:22,34:22,35:22,36:23,37:23,38:23,39:24,40:24,41:25,42:25,43:25,44:25,45:25,46:26,47:26,48:26,49:26,50:26,51:27,52:27,53:27,54:27,55:27,56:27,57:27,58:28,59:28,60:28,61:28,62:28,63:28,64:28,65:28,66:28,67:29,68:29,69:29,70:29,71:29,72:29,73:29,74:29,75:29,76:29,77:29,78:30,79:30,80:30,81:30,82:30,83:30,84:30,85:30,86:30,87:30,88:30,89:30,90:30,91:30,92:30,93:30,94:30,95:30,96:30,97:30,98:30,99:30,100:30,101:30,102:30,103:30,104:30,105:30,106:30,107:30,108:30,109:30,110:30,111:30,112:30,113:30,114:30};
-  return juzMap[surahNum] || 1;
-}
-
 function renderSurahList() {
-  if (!quranSurahs) return '';
-
   return `
-    <div class="surah-list-header">
-      <h3>فهرس السور</h3>
-    </div>
+    <div class="surah-list-header"><h3>فهرس سور القرآن الكريم</h3></div>
     <div class="surah-grid">
       ${quranSurahs.map(s => `
-        <button class="surah-card" onclick="openSurah(${s.number})">
+        <div class="surah-card" onclick="openSurah(${s.number})">
           <span class="surah-number">${s.number}</span>
-          <span class="surah-info">
+          <div class="surah-info">
             <span class="surah-name">${s.name}</span>
-            <span class="surah-meta">${s.englishName} · ${s.numberOfAyahs} آية · ${getSurahType(s.number)} · الجزء ${getJuzForSurah(s.number)}</span>
-          </span>
-          <span class="surah-arrow">←</span>
-        </button>
+            <span class="surah-meta">${s.englishName} · ${getSurahType(s.number)} · ${s.numberOfAyahs} آية</span>
+          </div>
+          <span class="surah-arrow" style="color:var(--text-tertiary);font-size:0.75rem">←</span>
+        </div>
       `).join('')}
     </div>
   `;
 }
 
-async function openSurah(surahNum, tab = 'reading') {
-  quranActiveTab = tab;
-  const container = document.getElementById('azkarList');
-  const surahMeta = quranSurahs ? quranSurahs.find(s => s.number === surahNum) : null;
+function getSurahName(num) {
+  const names = {1:'الفاتحة',2:'البقرة',3:'آل عمران',4:'النساء',5:'المائدة',6:'الأنعام',7:'الأعراف',8:'الأنفال',9:'التوبة',10:'يونس',11:'هود',12:'يوسف',13:'الرعد',14:'إبراهيم',15:'الحجر',16:'النحل',17:'الإسراء',18:'الكهف',19:'مريم',20:'طه',21:'الأنبياء',22:'الحج',23:'المؤمنون',24:'النور',25:'الفرقان',26:'الشعراء',27:'النمل',28:'القصص',29:'العنكبوت',30:'الروم',31:'لقمان',32:'السجدة',33:'الأحزاب',34:'سبأ',35:'فاطر',36:'يس',37:'الصافات',38:'ص',39:'الزمر',40:'غافر',41:'فصلت',42:'الشورى',43:'الزخرف',44:'الدخان',45:'الجاثية',46:'الأحقاف',47:'محمد',48:'الفتح',49:'الحجرات',50:'ق',51:'الذاريات',52:'الطور',53:'النجم',54:'القمر',55:'الرحمن',56:'الواقعة',57:'الحديد',58:'المجادلة',59:'الحشر',60:'الممتحنة',61:'الصف',62:'الجمعة',63:'المنافقون',64:'التغابن',65:'الطلاق',66:'التحريم',67:'الملك',68:'القلم',69:'الحاقة',70:'المعارج',71:'نوح',72:'الجن',73:'المزمل',74:'المدثر',75:'القيامة',76:'الإنسان',77:'المرسلات',78:'النبأ',79:'النازعات',80:'عبس',81:'التكوير',82:'الانفطار',83:'المطففين',84:'الانشقاق',85:'البروج',86:'الطارق',87:'الأعلى',88:'الغاشية',89:'الفجر',90:'البلد',91:'الشمس',92:'الليل',93:'الضحى',94:'الشرح',95:'التين',96:'العلق',97:'القدر',98:'البينة',99:'الزلزلة',100:'العاديات',101:'القارعة',102:'التكاثر',103:'العصر',104:'الهمزة',105:'الفيل',106:'قريش',107:'الماعون',108:'الكوثر',109:'الكافرون',110:'النصر',111:'المسد',112:'الإخلاص',113:'الفلق',114:'الناس'};
+  return names[num] || `سورة ${num}`;
+}
 
-  container.innerHTML = `
+function getSurahType(num) {
+  const madani = [2,3,4,5,8,9,13,19,22,24,33,47,48,49,57,58,59,60,61,62,63,64,65,66,76,98,110];
+  return madani.includes(num) ? 'مدنية' : 'مكية';
+}
+
+async function openSurah(surahNum, silent) {
+  state.quranView = 'reading';
+  currentSurah = surahNum;
+  state.quranActiveTab = state.quranActiveTab || 'reading';
+
+  const main = document.getElementById('mainContent');
+  const surah = quranSurahs?.find(s => s.number === surahNum);
+
+  showSubHeader(`سورة ${getSurahName(surahNum)}`, () => {
+    state.quranView = 'list';
+    renderQuranTab();
+  });
+
+  document.getElementById('subHeaderTitle').textContent = `سورة ${getSurahName(surahNum)}`;
+
+  main.innerHTML = `
     <div class="quran-container">
       <div class="quran-reading-header">
-        <button class="back-btn" onclick="renderQuran()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-          الفهرس
-        </button>
         <div class="quran-surah-title">
-          <h2>سورة ${getSurahName(surahNum)}</h2>
-          <span class="surah-badge">${getSurahType(surahNum)} · ${surahMeta?.numberOfAyahs || ''} آية · الجزء ${getJuzForSurah(surahNum)}</span>
+          <h2>${getSurahName(surahNum)} <span class="surah-type-badge">${getSurahType(surahNum)} · ${surah?.numberOfAyahs || ''} آية</span></h2>
         </div>
-        <div class="quran-toolbar">
-          <button class="quran-tool-btn" onclick="saveReadingPos(${surahNum})" title="حفظ الموضع">📍</button>
-          <button class="quran-tool-btn" onclick="quranFontSize(-1)">A-</button>
-          <button class="quran-tool-btn" onclick="quranFontSize(1)">A+</button>
-          <button class="quran-tool-btn" onclick="navigator.share ? navigator.share({title:'سورة ${getSurahName(surahNum)}',url:window.location.href}) : showToast('المشاركة غير مدعومة في هذا المتصفح')" title="مشاركة">📤</button>
+        <div class="quran-font-controls">
+          <button class="quran-font-btn" onclick="quranFontSize(-1)">A−</button>
+          <button class="quran-font-btn" onclick="quranFontSize(1)">A+</button>
         </div>
       </div>
-      <div class="quran-tabs" id="quranTabs">
-        <button class="quran-tab ${quranActiveTab === 'reading' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'reading')">📖 قراءة</button>
-        <button class="quran-tab ${quranActiveTab === 'tafsir' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'tafsir')">📚 تفسير</button>
-        <button class="quran-tab ${quranActiveTab === 'eerab' ? 'active' : ''}" onclick="switchQuranTab(${surahNum}, 'eerab')">📝 إعراب</button>
+      <div class="quran-tabs">
+        <button class="quran-tab ${state.quranActiveTab === 'reading' ? 'active' : ''}" onclick="switchQuranTab(${surahNum},'reading')">📖 قراءة</button>
+        <button class="quran-tab ${state.quranActiveTab === 'tafsir' ? 'active' : ''}" onclick="switchQuranTab(${surahNum},'tafsir')">📚 تفسير</button>
+        <button class="quran-tab ${state.quranActiveTab === 'eerab' ? 'active' : ''}" onclick="switchQuranTab(${surahNum},'eerab')">🔤 إعراب</button>
       </div>
-      <div class="quran-tab-content" id="quranTabContent">
-        <div class="quran-loading">⏳ جارِ تحميل المحتوى...</div>
-      </div>
+      <div id="quranTabContent"></div>
     </div>
   `;
 
-  currentSurah = surahNum;
-  if (quranActiveTab === 'reading') await loadReadingTab(surahNum);
-  else if (quranActiveTab === 'tafsir') await loadTafsirTab(surahNum);
-  else if (quranActiveTab === 'eerab') await loadEerabTab(surahNum);
+  if (state.quranActiveTab === 'reading') await loadReadingTab(surahNum);
+  else if (state.quranActiveTab === 'tafsir') await loadTafsirTab(surahNum);
+  else if (state.quranActiveTab === 'eerab') await loadEerabTab(surahNum);
 }
 
 async function switchQuranTab(surahNum, tab) {
-  quranActiveTab = tab;
+  state.quranActiveTab = tab;
   document.querySelectorAll('.quran-tab').forEach(t => t.classList.remove('active'));
   event?.target?.classList.add('active');
-  document.getElementById('quranTabContent').innerHTML = '<div class="quran-loading">⏳ جارِ تحميل المحتوى...</div>';
+  const content = document.getElementById('quranTabContent');
+  if (content) content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل المحتوى...</div>';
 
   if (tab === 'reading') await loadReadingTab(surahNum);
   else if (tab === 'tafsir') await loadTafsirTab(surahNum);
@@ -778,6 +429,7 @@ async function switchQuranTab(surahNum, tab) {
 
 async function loadReadingTab(surahNum) {
   const content = document.getElementById('quranTabContent');
+  if (!content) return;
 
   try {
     const res = await fetch(`${QURAN_API}/surah/${surahNum}`);
@@ -788,28 +440,30 @@ async function loadReadingTab(surahNum) {
     data.data.ayahs.forEach(ayah => {
       const isBookmarked = state.quranBookmarks.some(b => b.surah === surahNum && b.ayah === ayah.numberInSurah);
       html += `
-        <div class="quran-ayah" id="ayah-${ayah.numberInSurah}" data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}">
+        <div class="quran-ayah ${state.quranPos && state.quranPos.surah === surahNum && state.quranPos.ayah === ayah.numberInSurah ? 'highlight' : ''}"
+             id="ayah-${surahNum}-${ayah.numberInSurah}"
+             data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}">
           <div class="ayah-controls">
-            <button class="ayah-bookmark ${isBookmarked ? 'bookmarked' : ''}" onclick="toggleBookmark(${surahNum}, ${ayah.numberInSurah}, '${escapeHTML(ayah.text).replace(/'/g, "\\'")}')" title="${isBookmarked ? 'إلغاء الإشارة' : 'إضافة إشارة'}">
+            <button class="ayah-bookmark ${isBookmarked ? 'bookmarked' : ''}"
+                    data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}"
+                    title="${isBookmarked ? 'إلغاء الإشارة' : 'إضافة إشارة'}">
               ${isBookmarked ? '🔖' : '🏷️'}
             </button>
             <span class="ayah-number">${ayah.numberInSurah}</span>
           </div>
           <div class="ayah-text">${ayah.text}</div>
-        </div>
-      `;
+        </div>`;
     });
     html += '</div>';
     content.innerHTML = html;
 
+    // Scroll to position
     if (state.quranPos && state.quranPos.surah === surahNum) {
       setTimeout(() => {
-        const target = document.getElementById(`ayah-${state.quranPos.ayah}`);
+        const target = document.getElementById(`ayah-${surahNum}-${state.quranPos.ayah}`);
         if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 300);
     }
-    saveReadingPos(surahNum, 1);
-
   } catch(e) {
     content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل الآيات.</div>';
   }
@@ -817,48 +471,44 @@ async function loadReadingTab(surahNum) {
 
 function cleanApiText(text) {
   return text
-    .replace(/¥/g, '')        // Remove Surah API section marker
-    .replace(/¬/g, '')        // Remove Surah API note marker
-    .replace(/\\r\\n/g, '\n') // Convert escaped newlines
-    .replace(/\r\n/g, '\n')   // Convert Windows newlines
-    .replace(/\n{3,}/g, '\n\n') // Collapse multiple newlines
+    .replace(/¥/g, '')
+    .replace(/¬/g, '')
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
 async function loadTafsirTab(surahNum) {
   const content = document.getElementById('quranTabContent');
+  if (!content) return;
   content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل التفسير من تفسير ابن كثير...</div>';
 
   try {
     const ayahCount = quranSurahs?.find(s => s.number === surahNum)?.numberOfAyahs || 7;
-    let html = '<div class="quran-ayahs tafsir-view" id="quranAyahs">';
+    let html = '<div class="quran-ayahs tafsir-view">';
 
     for (let a = 1; a <= ayahCount; a++) {
       try {
         const tafsirRes = await fetch(`${SURAH_API}/aya/tafsir-katheer/${surahNum}/${a}`);
         const tafsirData = await tafsirRes.json();
-
         const ayahRes = await fetch(`${QURAN_API}/ayah/${surahNum}/${a}`);
         const ayahData = await ayahRes.json();
         const ayahText = ayahData.data?.text || '';
         const tafsirText = tafsirData.content ? cleanApiText(tafsirData.content) : '';
 
         html += `
-          <div class="quran-ayah tafsir-ayah" id="ayah-${a}">
-            <div class="ayah-controls">
-              <span class="ayah-number">${a}</span>
-            </div>
+          <div class="quran-ayah tafsir-ayah" id="ayah-${surahNum}-${a}">
+            <div class="ayah-controls"><span class="ayah-number">${a}</span></div>
             <div class="ayah-text">${ayahText}</div>
-            ${tafsirText ? `<div class="tafsir-content">${tafsirText}</div>` : ''}
-          </div>
-        `;
+            ${tafsirText ? `<div class="tafsir-content">${renderMD(tafsirText)}</div>` : ''}
+          </div>`;
       } catch(e) {
         html += `<div class="quran-ayah"><span class="ayah-number">${a}</span><div class="quran-error-sm">تعذّر تحميل التفسير</div></div>`;
       }
     }
     html += '</div>';
     content.innerHTML = html;
-
   } catch(e) {
     content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل التفسير.</div>';
   }
@@ -866,55 +516,90 @@ async function loadTafsirTab(surahNum) {
 
 async function loadEerabTab(surahNum) {
   const content = document.getElementById('quranTabContent');
+  if (!content) return;
   content.innerHTML = '<div class="quran-loading">⏳ جارِ تحميل الإعراب...</div>';
 
   try {
-    const ayahCount = quranSurahs?.find(s => s.number === surahNum)?.numberOfAyahs || 7;
-    let html = '<div class="quran-ayahs eerab-view" id="quranAyahs">';
+    const res = await fetch(`${QURAN_API}/surah/${surahNum}`);
+    const data = await res.json();
+    currentAyahs = data.data.ayahs;
 
-    for (let a = 1; a <= ayahCount; a++) {
-      try {
-        const eerabRes = await fetch(`${SURAH_API}/aya/eerab-aya/${surahNum}/${a}`);
-        const eerabData = await eerabRes.json();
-        const eerabText = eerabData.content ? cleanApiText(eerabData.content) : '';
-
-        html += `
-          <div class="quran-ayah eerab-ayah" id="ayah-${a}">
-            <div class="ayah-controls">
-              <span class="ayah-number">${a}</span>
-            </div>
-            <div class="ayah-text">${eerabData.aya_text || ''}</div>
-            ${eerabText ? `<div class="eerab-content"><pre>${eerabText}</pre></div>` : ''}
-          </div>
-        `;
-      } catch(e) {
-        html += `<div class="quran-ayah"><span class="ayah-number">${a}</span><div class="quran-error-sm">تعذّر تحميل الإعراب</div></div>`;
-      }
+    let html = '<div class="quran-ayahs">';
+    for (const ayah of data.data.ayahs) {
+      const words = ayah.text.split(' ');
+      html += `<div class="quran-ayah" id="ayah-${surahNum}-${ayah.numberInSurah}">
+        <div class="ayah-controls"><span class="ayah-number">${ayah.numberInSurah}</span></div>
+        <div class="ayah-text">`;
+      words.forEach((word, wi) => {
+        html += `<span class="eerab-word" onclick="toggleEerab(this,${surahNum},${ayah.numberInSurah},${wi+1})">${word}<span class="eerab-detail"></span></span>`;
+      });
+      html += `</div></div>`;
     }
     html += '</div>';
     content.innerHTML = html;
-
   } catch(e) {
     content.innerHTML = '<div class="quran-error">❌ تعذّر تحميل الإعراب.</div>';
   }
 }
 
-function saveReadingPos(surah, ayah) {
-  if (!ayah) {
-    const ayahs = document.querySelectorAll('.quran-ayah');
-    let closest = { surah: currentSurah, ayah: 1 };
-    ayahs.forEach(el => {
-      const rect = el.getBoundingClientRect();
-      if (rect.top < window.innerHeight / 2) {
-        closest.ayah = parseInt(el.dataset.ayah);
-      }
-    });
-    state.quranPos = closest;
-  } else {
-    state.quranPos = { surah, ayah };
+async function toggleEerab(el, surah, ayah, wordNum) {
+  const detail = el.querySelector('.eerab-detail');
+  if (el.classList.contains('active')) {
+    el.classList.remove('active');
+    detail.textContent = '';
+    return;
   }
-  saveState();
-  showToast('📍 تم حفظ موضع القراءة');
+
+  document.querySelectorAll('.eerab-word.active').forEach(w => w.classList.remove('active'));
+
+  if (detail.textContent) {
+    el.classList.add('active');
+    return;
+  }
+
+  detail.textContent = '⏳';
+  el.classList.add('active');
+
+  try {
+    const res = await fetch(`${SURAH_API}/word/irab/${surah}/${ayah}/${wordNum}`);
+    const data = await res.json();
+    const irabText = typeof data === 'string' ? data : (data.content || data.irab || JSON.stringify(data));
+    detail.textContent = irabText.replace(/[¥¬]/g, '').trim() || 'لا يوجد إعراب';
+  } catch(e) {
+    detail.textContent = 'تعذّر تحميل الإعراب';
+  }
+}
+
+// ─── Quran Bookmarks ─────────────────────
+function toggleBookmark(surah, ayah) {
+  const idx = state.quranBookmarks.findIndex(b => b.surah === surah && b.ayah === ayah);
+  if (idx >= 0) {
+    state.quranBookmarks.splice(idx, 1);
+    showToast('تم إلغاء الإشارة المرجعية');
+  } else {
+    // Find the ayah text
+    let text = '';
+    const ayahEl = document.getElementById(`ayah-${surah}-${ayah}`);
+    if (ayahEl) {
+      const textEl = ayahEl.querySelector('.ayah-text');
+      if (textEl) text = textEl.textContent.trim();
+    }
+    state.quranBookmarks.push({ surah, ayah, text, addedAt: Date.now() });
+    state.quranBookmarks.sort((a, b) => a.surah - b.surah || a.ayah - b.ayah);
+    showToast('🔖 تمت الإشارة المرجعية');
+    if (navigator.vibrate) navigator.vibrate(20);
+  }
+  saveQuranBookmarks();
+  updateBookmarkUI(surah, ayah);
+}
+
+function updateBookmarkUI(surah, ayah) {
+  const btn = document.querySelector(`#ayah-${surah}-${ayah} .ayah-bookmark`);
+  if (!btn) return;
+  const isBookmarked = state.quranBookmarks.some(b => b.surah === surah && b.ayah === ayah);
+  btn.classList.toggle('bookmarked', isBookmarked);
+  btn.textContent = isBookmarked ? '🔖' : '🏷️';
+  btn.title = isBookmarked ? 'إلغاء الإشارة' : 'إضافة إشارة';
 }
 
 function resumeQuran() {
@@ -923,112 +608,310 @@ function resumeQuran() {
   }
 }
 
-function toggleBookmark(surah, ayah, text) {
-  const idx = state.quranBookmarks.findIndex(b => b.surah === surah && b.ayah === ayah);
-  if (idx >= 0) {
-    state.quranBookmarks.splice(idx, 1);
-    showToast('تم إلغاء الإشارة المرجعية');
-  } else {
-    state.quranBookmarks.push({ surah, ayah, text, addedAt: Date.now() });
-    state.quranBookmarks.sort((a, b) => a.surah - b.surah || a.ayah - b.ayah);
-    showToast('🔖 تمت الإشارة المرجعية');
-    if (navigator.vibrate) navigator.vibrate(20);
-  }
-  saveQuranBookmarks();
-  updateBookmarkButton(surah, ayah);
-}
-
-function updateBookmarkButton(surah, ayah) {
-  const btn = document.querySelector(`#ayah-${ayah} .ayah-bookmark`);
-  if (!btn) return;
-  const isBookmarked = state.quranBookmarks.some(b => b.surah === surah && b.ayah === ayah);
-  btn.classList.toggle('bookmarked', isBookmarked);
-  btn.textContent = isBookmarked ? '🔖' : '🏷️';
-  btn.title = isBookmarked ? 'إلغاء الإشارة' : 'إضافة إشارة';
-}
-
 function showBookmarks() {
-  const container = document.getElementById('azkarList');
+  state.quranView = 'bookmarks';
+  showSubHeader('الإشارات المرجعية', () => {
+    state.quranView = 'list';
+    renderQuranTab();
+  });
+
+  const main = document.getElementById('mainContent');
   if (state.quranBookmarks.length === 0) {
-    container.innerHTML = `
-      <div class="quran-container">
-        <div class="quran-reading-header">
-          <button class="back-btn" onclick="renderQuran()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-            الفهرس
-          </button>
-          <div class="quran-surah-title"><h2>الإشارات المرجعية</h2></div>
-        </div>
-        <div class="quran-empty">لا توجد إشارات مرجعية. اضغط 🏷️ بجانب أي آية لإضافتها.</div>
-      </div>
-    `;
+    main.innerHTML = '<div class="quran-empty">لا توجد إشارات مرجعية. اضغط 🏷️ بجانب أي آية لإضافتها.</div>';
     return;
   }
-  container.innerHTML = `
-    <div class="quran-container">
-      <div class="quran-reading-header">
-        <button class="back-btn" onclick="renderQuran()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-          الفهرس
-        </button>
-        <div class="quran-surah-title"><h2>الإشارات المرجعية</h2></div>
+
+  main.innerHTML = `
+    <div class="bookmarks-list">
+      ${state.quranBookmarks.map(b => `
+        <div class="bookmark-item" onclick="openSurah(${b.surah});setTimeout(()=>{const el=document.getElementById('ayah-${b.surah}-${b.ayah}');if(el)el.scrollIntoView({behavior:'smooth',block:'center'})},500)">
+          <span class="bookmark-ref">📖 ${getSurahName(b.surah)} — آية ${b.ayah}</span>
+          <span class="bookmark-text">${truncateText(b.text, 60)}</span>
+          <button class="bookmark-delete" onclick="event.stopPropagation();toggleBookmark(${b.surah},${b.ayah});showBookmarks()">✕</button>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function saveReadingPos(surah, ayah) {
+  state.quranPos = { surah, ayah };
+  saveState();
+}
+
+function quranFontSize(delta) {
+  const el = document.getElementById('quranAyahs');
+  if (!el) return;
+  const current = parseFloat(getComputedStyle(el).fontSize) || 22;
+  el.style.fontSize = (current + delta * 2) + 'px';
+}
+
+// ═══════════════════════════════════════════
+//  PRAYER TAB
+// ═══════════════════════════════════════════
+
+function renderPrayerTab() {
+  const main = document.getElementById('mainContent');
+  hideSubHeader();
+  const cat = AZKAR_DATA.categories.find(c => c.id === 'prayer');
+
+  let html = `<div class="category-header"><h2>${cat?.icon || '🕌'} ${cat?.name || 'كيفية الصلاة'}</h2><p class="time-hint">${cat?.time || ''}</p></div>`;
+
+  // Prayer steps
+  html += '<div class="prayer-steps">';
+  (AZKAR_DATA.prayerSteps || []).forEach(s => {
+    html += `
+      <div class="prayer-step">
+        <div class="prayer-step-number">${s.step}</div>
+        <div class="prayer-step-content">
+          <h3 class="prayer-step-title">${s.title}</h3>
+          <p class="prayer-step-desc">${renderMD(s.desc)}</p>
+          ${s.zikr ? `<div class="prayer-step-zikr">${renderMD(s.zikr)}</div>` : ''}
+        </div>
+      </div>`;
+  });
+  html += '</div>';
+
+  // Prayer info sections
+  const PI = AZKAR_DATA.prayerInfo;
+  if (PI) {
+    // Obligatory prayers
+    if (PI.fard && PI.fard.prayers) {
+      html += `<div class="prayer-table-section"><h3>${PI.fard.title || 'الصلوات المفروضة'}</h3>`;
+      PI.fard.prayers.forEach(p => {
+        html += `
+          <div class="prayer-card" onclick="this.classList.toggle('expanded')">
+            <div class="prayer-card-header">
+              <span class="prayer-card-name">🕌 ${p.name}</span>
+              <span class="prayer-card-count">${p.rakaat} ركعات</span>
+            </div>
+            <div class="prayer-card-desc">${p.sunnah || ''} · ${p.time || ''}</div>
+            <div class="prayer-card-detail">${p.sunnah ? '<p>' + p.sunnah + '</p>' : ''}${p.time ? '<p>الوقت: ' + p.time + '</p>' : ''}</div>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    // Sunnah prayers
+    if (PI.sunan && PI.sunan.prayers) {
+      html += `<div class="prayer-table-section"><h3>${PI.sunan.title || 'السنن الرواتب'}</h3>`;
+      if (PI.sunan.desc) html += `<p style="padding:0 16px 8px;font-size:0.75rem;color:var(--text-tertiary)">${PI.sunan.desc}</p>`;
+      PI.sunan.prayers.forEach(p => {
+        html += `
+          <div class="prayer-card" onclick="this.classList.toggle('expanded')">
+            <div class="prayer-card-header">
+              <span class="prayer-card-name">☀️ ${p.name}</span>
+              <span class="prayer-card-count">${p.rakaat} ركعات</span>
+            </div>
+            <div class="prayer-card-desc">${p.note || ''}</div>
+            <div class="prayer-card-detail">${p.note || ''}</div>
+          </div>`;
+      });
+      html += '</div>';
+    }
+
+    // Additional prayers (witr, duha, tahajjud, etc.)
+    const extraKeys = ['witr','duha','tahajjud','tarawih','istikhara','tawbah','hajah','tasabeeh','eid','kusoof','istisqa','janaza','tahiyat_masjid','wudu'];
+    const extraPrayers = extraKeys.map(k => PI[k]).filter(Boolean);
+    if (extraPrayers.length) {
+      html += '<div class="prayer-table-section"><h3>صلوات إضافية</h3>';
+      extraPrayers.forEach(p => {
+        const detailParts = [];
+        if (p.note) detailParts.push('<p>' + p.note + '</p>');
+        if (p.zikr) detailParts.push('<p><strong>الذكر/الدعاء:</strong><br>' + renderMD(p.zikr) + '</p>');
+        if (p.fadl) detailParts.push('<p><strong>الفضل:</strong> ' + p.fadl + '</p>');
+        html += `
+          <div class="prayer-card" onclick="this.classList.toggle('expanded')">
+            <div class="prayer-card-header">
+              <span class="prayer-card-name">🕌 ${p.title || p.name || ''}</span>
+              <span class="prayer-card-count">${typeof p.rakaat === 'number' ? p.rakaat + ' ركعات' : (p.rakaat || '')}</span>
+            </div>
+            <div class="prayer-card-desc">${p.desc || ''}</div>
+            <div class="prayer-card-detail">${detailParts.join('')}</div>
+          </div>`;
+      });
+      html += '</div>';
+    }
+  }
+
+  main.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════
+//  MORE TAB
+// ═══════════════════════════════════════════
+
+function renderMoreTab() {
+  const main = document.getElementById('mainContent');
+  hideSubHeader();
+
+  main.innerHTML = `
+    <div class="grouped-section">
+      <div class="grouped-header">المظهر</div>
+      <div class="grouped-list">
+        <div class="grouped-item" onclick="toggleTheme();renderMoreTab();haptic()">
+          <span class="grouped-item-title">${state.theme === 'dark' ? '🌙' : '☀️'} الوضع ${state.theme === 'dark' ? 'الليلي' : 'النهاري'}</span>
+          <span class="settings-value">اضغط للتغيير</span>
+        </div>
       </div>
-      <div class="bookmarks-list">
-        ${state.quranBookmarks.map((b, i) => `
-          <div class="bookmark-item" onclick="openSurah(${b.surah}); setTimeout(() => document.getElementById('ayah-${b.ayah}')?.scrollIntoView({behavior:'smooth',block:'center'}), 500)">
-            <span class="bookmark-ref">📖 ${getSurahName(b.surah)} — آية ${b.ayah}</span>
-            <span class="bookmark-text">${truncateText(b.text, 60)}</span>
-            <button class="bookmark-delete" onclick="event.stopPropagation(); toggleBookmark(${b.surah}, ${b.ayah}); showBookmarks()">✕</button>
-          </div>
-        `).join('')}
+    </div>
+
+    <div class="grouped-section">
+      <div class="grouped-header">المصحف</div>
+      <div class="grouped-list">
+        <div class="grouped-item" onclick="navigateTo('quran');state.quranView='bookmarks';showBookmarks()">
+          <span class="grouped-item-title">📑 الإشارات المرجعية</span>
+          <span class="settings-value">${state.quranBookmarks.length} إشارة</span>
+        </div>
+        <div class="grouped-item" onclick="navigateTo('quran');resumeQuran()">
+          <span class="grouped-item-title">📍 آخر موضع قراءة</span>
+          <span class="settings-value">${state.quranPos ? getSurahName(state.quranPos.surah) + ' ' + state.quranPos.ayah : '—'}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grouped-section">
+      <div class="grouped-header">عن التطبيق</div>
+      <div class="grouped-list">
+        <div class="grouped-item">
+          <span class="grouped-item-title">📿 أذكاري v3.0</span>
+          <span class="grouped-item-subtitle">تطبيق أذكار يومية ومصحف ودليل الصلاة</span>
+        </div>
       </div>
     </div>
   `;
 }
 
-function quranFontSize(delta) {
-  const ayahsEl = document.getElementById('quranAyahs');
-  if (!ayahsEl) return;
-  const current = parseFloat(getComputedStyle(ayahsEl).fontSize) || 22;
-  ayahsEl.style.fontSize = (current + delta * 2) + 'px';
+// ═══════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function truncateText(text, max) {
+  if (!text) return '';
+  return text.length > max ? text.substring(0, max) + '...' : text;
+}
+
+function renderMD(text) {
+  if (!text) return '';
+  let html = text;
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = html.replace(/\n/g, '<br>');
+  if (!html.startsWith('<')) html = '<p>' + html + '</p>';
+  return html;
+}
+
+function haptic() {
+  if (navigator.vibrate) navigator.vibrate(10);
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 // ═══════════════════════════════════════════
-//  Event Listeners
+//  EVENT LISTENERS
 // ═══════════════════════════════════════════
 
 function setupEventListeners() {
-  document.getElementById('categoryTabs').addEventListener('click', e => {
-    const tab = e.target.closest('.cat-tab');
-    if (!tab) return;
-    setActiveCategory(tab.dataset.cat);
+  // Theme toggle
+  document.getElementById('themeToggle').addEventListener('click', () => {
+    toggleTheme();
+    haptic();
   });
 
-  // Touch swipe for category tabs
+  // Tab bar navigation
+  document.getElementById('tabBar').addEventListener('click', e => {
+    const item = e.target.closest('.tab-bar-item');
+    if (!item) return;
+    haptic();
+    navigateTo(item.dataset.tab);
+  });
+
+  // Category tabs (delegated on main content)
+  document.getElementById('mainContent').addEventListener('click', e => {
+    const catTab = e.target.closest('.cat-tab');
+    if (catTab && catTab.dataset.cat) {
+      haptic();
+      renderAzkarContent(catTab.dataset.cat);
+    }
+
+    // Bookmark button (event delegation)
+    const bookmarkBtn = e.target.closest('.ayah-bookmark');
+    if (bookmarkBtn) {
+      const surah = parseInt(bookmarkBtn.dataset.surah);
+      const ayah = parseInt(bookmarkBtn.dataset.ayah);
+      if (surah && ayah) {
+        e.stopPropagation();
+        toggleBookmark(surah, ayah);
+      }
+    }
+  });
+
+  // Swipe between tabs
   let touchStartX = 0;
-  const tabsEl = document.getElementById('categoryTabs');
-  tabsEl.addEventListener('touchstart', e => {
+  let touchStartY = 0;
+  document.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
   }, { passive: true });
-  tabsEl.addEventListener('touchend', e => {
-    const diff = touchStartX - e.changedTouches[0].clientX;
-    if (Math.abs(diff) > 50) {
-      tabsEl.scrollBy({ left: diff * 2, behavior: 'smooth' });
+
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    // Only swipe if horizontal movement > vertical
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const tabs = ['azkar', 'quran', 'prayer', 'more'];
+      const currentIdx = tabs.indexOf(state.activeTab);
+      if (dx < -40 && currentIdx < tabs.length - 1) {
+        // Swipe left (RTL: next tab)
+        navigateTo(tabs[currentIdx + 1]);
+      } else if (dx > 40 && currentIdx > 0) {
+        // Swipe right (RTL: previous tab)
+        navigateTo(tabs[currentIdx - 1]);
+      }
     }
   });
 
-  document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-  setupSearch();
-
-  // Scroll-based reading position save for Quran
-  let quranScrollTimer;
-  document.addEventListener('scroll', () => {
-    if (state.activeCategory === 'quran' && currentSurah) {
-      clearTimeout(quranScrollTimer);
-      quranScrollTimer = setTimeout(() => saveReadingPos(currentSurah), 2000);
+  // Save reading position on scroll
+  document.getElementById('mainContent').addEventListener('scroll', () => {
+    if (state.activeTab !== 'quran' || state.quranView !== 'reading') return;
+    const ayahs = document.querySelectorAll('.quran-ayah');
+    let closest = null;
+    let closestDist = Infinity;
+    const viewTop = document.getElementById('mainContent').scrollTop + 100;
+    ayahs.forEach(el => {
+      const dist = Math.abs(el.offsetTop - viewTop);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = el;
+      }
+    });
+    if (closest) {
+      const surah = parseInt(closest.dataset.surah);
+      const ayah = parseInt(closest.dataset.ayah);
+      if (surah && ayah) saveReadingPos(surah, ayah);
     }
   }, { passive: true });
+
+  // Keyboard shortcut for theme
+  document.addEventListener('keydown', e => {
+    if (e.key === 't' && e.metaKey) {
+      e.preventDefault();
+      toggleTheme();
+    }
+  });
 }
 
-// ─── Boot ───────────────────────────────
+// ─── Boot ─────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
