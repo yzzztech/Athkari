@@ -252,7 +252,7 @@ function renderAzkarContent(catId) {
     const done = state.completed[z.id];
     const max = z.count || 1;
     return `
-      <div class="zikr-card ${done ? 'completed' : ''}" data-zikr="${z.id}">
+      <div class="zikr-card ${done ? 'completed' : ''}" data-zikr="${z.id}" onclick="tapZikrCard('${z.id}', ${max})">
         <span class="completed-check">✅</span>
         <div class="zikr-text">${renderMD(z.text)}</div>
         ${z.benefit ? `<div style="font-size:0.8125rem;color:var(--text-tertiary);text-align:center;margin-bottom:8px">${renderMD(z.benefit)}</div>` : ''}
@@ -269,6 +269,7 @@ function renderAzkarContent(catId) {
 }
 
 function incrementZikr(zikrId, max) {
+  event?.stopPropagation();
   state.counters[zikrId] = (state.counters[zikrId] || 0) + 1;
   if (state.counters[zikrId] >= max) {
     state.counters[zikrId] = max;
@@ -284,6 +285,7 @@ function incrementZikr(zikrId, max) {
 }
 
 function decrementZikr(zikrId) {
+  event?.stopPropagation();
   if (!state.counters[zikrId] || state.counters[zikrId] <= 0) return;
   state.counters[zikrId]--;
   if (state.completed[zikrId]) {
@@ -291,6 +293,11 @@ function decrementZikr(zikrId) {
   }
   saveState();
   renderAzkarContent(state.azkarCategory);
+}
+
+function tapZikrCard(zikrId, max) {
+  // Tap anywhere on the card = increment by 1
+  incrementZikr(zikrId, max);
 }
 
 function toggleZikrExpand(btn, zikrId) {
@@ -488,10 +495,12 @@ async function loadReadingTab(surahNum) {
     let html = '<div class="quran-ayahs" id="quranAyahs">';
     data.data.ayahs.forEach(ayah => {
       const isBookmarked = state.quranBookmarks.some(b => b.surah === surahNum && b.ayah === ayah.numberInSurah);
+      const isHighlighted = state.quranPos && state.quranPos.surah === surahNum && state.quranPos.ayah === ayah.numberInSurah;
       html += `
-        <div class="quran-ayah ${state.quranPos && state.quranPos.surah === surahNum && state.quranPos.ayah === ayah.numberInSurah ? 'highlight' : ''}"
+        <div class="quran-ayah ${isHighlighted ? 'highlight' : ''}"
              id="ayah-${surahNum}-${ayah.numberInSurah}"
-             data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}">
+             data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}"
+             onclick="tapAyah(${surahNum}, ${ayah.numberInSurah})">
           <div class="ayah-controls">
             <button class="ayah-bookmark ${isBookmarked ? 'bookmarked' : ''}"
                     data-surah="${surahNum}" data-ayah="${ayah.numberInSurah}"
@@ -686,6 +695,18 @@ function showBookmarks() {
 function saveReadingPos(surah, ayah) {
   state.quranPos = { surah, ayah };
   saveState();
+}
+
+function tapAyah(surah, ayah) {
+  // Remove highlight from previous ayah
+  document.querySelectorAll('.quran-ayah.highlight').forEach(el => el.classList.remove('highlight'));
+  // Highlight this ayah
+  const el = document.getElementById(`ayah-${surah}-${ayah}`);
+  if (el) el.classList.add('highlight');
+  // Save reading position
+  saveReadingPos(surah, ayah);
+  if (navigator.vibrate) navigator.vibrate(10);
+  showToast('📍 تم تحديد الموضع');
 }
 
 function quranFontSize(delta) {

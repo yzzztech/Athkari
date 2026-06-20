@@ -400,10 +400,15 @@ body {
   transition: all var(--transition);
   position: relative;
   border: 0.5px solid var(--border);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .zikr-card:active {
-  transform: scale(0.985);
+  transform: scale(0.97);
+  background: var(--bg-hover);
 }
 
 .zikr-card.completed {
@@ -763,7 +768,28 @@ body {
 }
 
 .quran-ayah:last-child { border-bottom: none; }
-.quran-ayah.highlight { background: var(--primary-light); border-radius: 8px; padding: 12px 8px; }
+.quran-ayah.highlight {
+  background: var(--primary-light);
+  border-radius: 8px;
+  padding: 12px 8px;
+  border-right: 3px solid var(--primary);
+  transition: all 0.25s ease;
+}
+.quran-ayah.highlight .ayah-number {
+  background: var(--primary);
+  color: #fff;
+}
+
+/* Ayah tap target: the whole ayah is clickable */
+.quran-ayah {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.quran-ayah:active {
+  opacity: 0.7;
+}
 
 .ayah-controls {
   display: flex;
