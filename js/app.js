@@ -19,6 +19,7 @@ const state = {
   streaks: {},
   quranPos: null,
   quranBookmarks: [],
+  quranSearch: '',
   quranView: 'list',        // 'list' | 'reading' | 'bookmarks'
   quranActiveTab: 'reading' // reading|tafsir|eerab
 };
@@ -319,6 +320,17 @@ async function renderQuranTab() {
   state.quranView = 'list';
   main.innerHTML = `
     <div class="quran-container">
+      ${quranSurahs ? `
+      <div class="quran-search">
+        <div class="quran-search-wrap">
+          <span class="quran-search-icon">🔍</span>
+          <input type="text" class="quran-search-input" id="quranSearchInput"
+                 placeholder="ابحث عن سورة... (بدون تشكيل)"
+                 autocomplete="off" value="${state.quranSearch || ''}">
+          <button class="quran-search-clear ${state.quranSearch ? 'visible' : ''}" id="quranSearchClear">✕</button>
+        </div>
+      </div>
+      ` : ''}
       <div class="quran-nav-bar">
         <div class="quran-nav-left">
           ${state.quranPos ? `
@@ -331,9 +343,19 @@ async function renderQuranTab() {
           📑 ${state.quranBookmarks.length || ''}
         </button>
       </div>
-      ${!quranSurahs ? '<div class="quran-loading">⏳ جارِ تحميل المصحف...</div>' : renderSurahList()}
+      <div id="surahListContainer">
+        ${!quranSurahs ? '<div class="quran-loading">⏳ جارِ تحميل المصحف...</div>' : renderSurahList(state.quranSearch)}
+      </div>
     </div>
   `;
+
+  // Focus search if there was a query
+  if (state.quranSearch) {
+    setTimeout(() => {
+      const input = document.getElementById('quranSearchInput');
+      if (input) input.focus();
+    }, 100);
+  }
 
   if (!quranSurahs) {
     try {
@@ -347,11 +369,22 @@ async function renderQuranTab() {
   }
 }
 
-function renderSurahList() {
+function renderSurahList(filter) {
+  let surahs = quranSurahs;
+  if (filter) {
+    const q = normalizeArabic(filter);
+    surahs = quranSurahs.filter(s => {
+      return normalizeArabic(s.name).includes(q) ||
+             s.number.toString().includes(q) ||
+             (s.englishName && s.englishName.toLowerCase().includes(filter.toLowerCase()));
+    });
+  }
+  const countText = filter ? `<div class="quran-result-count">${surahs.length} سورة</div>` : '';
   return `
-    <div class="surah-list-header"><h3>فهرس سور القرآن الكريم</h3></div>
+    <div class="surah-list-header"><h3>${filter ? 'نتائج البحث' : 'فهرس سور القرآن الكريم'}</h3></div>
+    ${countText}
     <div class="surah-grid">
-      ${quranSurahs.map(s => `
+      ${surahs.length ? surahs.map(s => `
         <div class="surah-card" onclick="openSurah(${s.number})">
           <span class="surah-number">${s.number}</span>
           <div class="surah-info">
@@ -360,9 +393,24 @@ function renderSurahList() {
           </div>
           <span class="surah-arrow" style="color:var(--text-tertiary);font-size:0.75rem">←</span>
         </div>
-      `).join('')}
+      `).join('') : '<div class="quran-empty">لا توجد نتائج</div>'}
     </div>
   `;
+}
+
+// Remove diacritics for search matching
+function normalizeArabic(str) {
+  if (!str) return '';
+  return str
+    .replace(/[ًٌٍَُِّْٰـ]/g, '')          // tashkeel
+    .replace(/[أإآ]/g, 'ا')                  // alef variants
+    .replace(/[ىئ]/g, 'ي')                    // yeh variants
+    .replace(/ة/g, 'ه')                       // teh marbuta
+    .replace(/ؤ/g, 'و')                       // waw with hamza
+    .replace(/[\u064B-\u065F\u0670]/g, '')    // full diacritic range
+    .replace(/\s+/g, ' ')                     // collapse spaces
+    .trim()
+    .toLowerCase();
 }
 
 function getSurahName(num) {
@@ -854,6 +902,32 @@ function setupEventListeners() {
       if (surah && ayah) {
         e.stopPropagation();
         toggleBookmark(surah, ayah);
+      }
+    }
+
+    // Quran search clear button
+    const clearBtn = e.target.closest('#quranSearchClear');
+    if (clearBtn) {
+      state.quranSearch = '';
+      document.getElementById('quranSearchInput').value = '';
+      document.getElementById('surahListContainer').innerHTML = renderSurahList('');
+      clearBtn.classList.remove('visible');
+      document.getElementById('quranSearchInput').focus();
+    }
+  });
+
+  // Quran search input (live filter)
+  document.getElementById('mainContent').addEventListener('input', e => {
+    if (e.target.id === 'quranSearchInput') {
+      const query = e.target.value.trim();
+      state.quranSearch = query;
+      const container = document.getElementById('surahListContainer');
+      const clearBtn = document.getElementById('quranSearchClear');
+      if (container) {
+        container.innerHTML = renderSurahList(query);
+      }
+      if (clearBtn) {
+        clearBtn.classList.toggle('visible', query.length > 0);
       }
     }
   });
